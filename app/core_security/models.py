@@ -7,6 +7,7 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False) # ej: 'docente', 'estudiante'
     description = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
     
     # Relación bidireccional (Corregido a backref)
     users = db.relationship('User', backref='role', lazy='dynamic')
@@ -19,6 +20,7 @@ class Person(db.Model):
     last_name = db.Column(db.String(100), nullable=False)
     document_id = db.Column(db.String(50), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
     
     # Relación 1 a 1 con User (Corregido a backref)
     user = db.relationship('User', backref='person', uselist=False, cascade="all, delete-orphan")

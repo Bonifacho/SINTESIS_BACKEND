@@ -27,3 +27,42 @@ class SecurityRepository:
     @staticmethod
     def get_user_by_username(username: str) -> User:
         return db.session.query(User).filter_by(username=username).first()
+
+    # ==========================================
+    # REPOSITORIO DE ROLES
+    # ==========================================
+    @staticmethod
+    def get_all_roles():
+        """Obtiene todos los roles activos."""
+        return db.session.query(Role).filter_by(is_active=True).all()
+
+    @staticmethod
+    def get_role_by_id(role_id: int) -> Role:
+        """Obtiene un rol por su ID."""
+        return db.session.query(Role).filter_by(id=role_id).first()
+
+    # ==========================================
+    # REPOSITORIO DE PERSONAS
+    # ==========================================
+    @staticmethod
+    def get_all_persons():
+        """Obtiene todas las personas activas."""
+        return db.session.query(Person).filter_by(is_active=True).all()
+
+    @staticmethod
+    def get_person_by_id(person_id: int) -> Person:
+        """Obtiene una persona por su ID."""
+        return db.session.query(Person).filter_by(id=person_id).first()
+
+    # ==========================================
+    # REPOSITORIO DE USUARIOS
+    # ==========================================
+    @staticmethod
+    def get_all_users():
+        """Obtiene todos los usuarios activos."""
+        return db.session.query(User).filter_by(is_active=True).all()
+
+    @staticmethod
+    def get_user_by_id(user_id: int) -> User:
+        """Obtiene un usuario por su ID."""
+        return db.session.query(User).filter_by(id=user_id).first()

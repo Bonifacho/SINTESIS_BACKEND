@@ -24,43 +24,43 @@ class Enrollment(db.Model):
     group_id = db.Column(db.Integer, db.ForeignKey('academic_groups.id'), nullable=False)
     student_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     enrolled_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
 
 class Topic(db.Model):
-    """Temáticas generales (Ej: Física Cinemática)"""
     __tablename__ = 'academic_topics'
-    
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(150), nullable=False)
     group_id = db.Column(db.Integer, db.ForeignKey('academic_groups.id'), nullable=False)
-    order_index = db.Column(db.Integer, default=0) # Para el progreso secuencial
+    order_index = db.Column(db.Integer, default=0)
+    
+    # NUEVO: Soft Delete
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
 
     lessons = db.relationship('Lesson', backref='topic', lazy='dynamic', cascade="all, delete-orphan")
 
 class Lesson(db.Model):
-    """Lecciones dentro de un tema (Ej: MRUV)"""
     __tablename__ = 'academic_lessons'
-    
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(150), nullable=False)
     topic_id = db.Column(db.Integer, db.ForeignKey('academic_topics.id'), nullable=False)
     order_index = db.Column(db.Integer, default=0)
     
+    # NUEVO: Soft Delete
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    
     activities = db.relationship('Activity', backref='lesson', lazy='dynamic', cascade="all, delete-orphan")
 
 class Activity(db.Model):
-    """La actividad interactiva que consume la app Android"""
     __tablename__ = 'academic_activities'
-    
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(150), nullable=False)
     lesson_id = db.Column(db.Integer, db.ForeignKey('academic_lessons.id'), nullable=False)
-    
-    # EL CORAZÓN DEL AGNOSTICISMO (JSON Polimórfico)
     ui_config = db.Column(db.JSON, nullable=False)
-    
-    # Puntaje mínimo para aprobar (tipo Duolingo)
     passing_score = db.Column(db.Integer, default=80)
     order_index = db.Column(db.Integer, default=0)
+    
+    # NUEVO: Soft Delete
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
     
 class StudentProgress(db.Model):
     """Registro de progreso tipo Duolingo"""
@@ -75,3 +75,4 @@ class StudentProgress(db.Model):
     score = db.Column(db.Integer, nullable=False) # Puntaje obtenido (ej. 100)
     passed = db.Column(db.Boolean, default=False) # ¿Superó el passing_score?
     completed_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
