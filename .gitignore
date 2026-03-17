@@ -18,3 +18,11 @@ instance/
 
 # Herramientas de VS Code
 .vscode/
+
+# Archivo de contexto para agentes
+CONTEXTO_UNIVERSAL_PROYECTO.md
+AGENTES.md 
+
+
+# archivo de guion para el video temporal
+guion_video.txt
