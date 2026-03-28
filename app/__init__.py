@@ -3,6 +3,7 @@ from config import Config
 from app.extensions import db, migrate, jwt
 # Importar modelos para que Alembic los detecte
 from app.core_security import models as security_models
+from app.core_academic import models as academic_models
 
 
 def create_app(config_class=Config):
