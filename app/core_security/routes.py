@@ -1,237 +1,230 @@
+# app/core_security/routes.py
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import (
+    create_access_token, jwt_required,
+    get_jwt_identity, get_jwt
+)
+from datetime import datetime, timezone, timedelta
 from app.core_security.services import SecurityService
-from flask_jwt_extended import jwt_required
+from app.core_security.repositories import SecurityRepository
 
-# Creamos el Blueprint para el dominio de seguridad
 security_bp = Blueprint('security', __name__, url_prefix='/api/v1/security')
 
-# ==========================================
-# AUTENTICACIÓN (LOGIN / REGISTER)
-# ==========================================
 
+# ── REGISTRO ──────────────────────────────────────────────────────────────────
 @security_bp.route('/register', methods=['POST'])
 def register():
-    """Ruta para registrar un nuevo usuario con su persona y rol asociado."""
     data = request.get_json()
-    
-    # Validación básica MVP
-    if not data or 'person' not in data or 'user' not in data or 'role' not in data:
-        return jsonify({"error": "Estructura JSON inválida. Faltan datos (person, user, role)"}), 400
-        
+    required = ['first_name', 'last_name', 'document_id',
+                 'username', 'password', 'role_name']
+    if not data or not all(k in data for k in required):
+        return jsonify({"error": f"Se requieren: {required}"}), 400
     try:
-        # Delegamos la lógica al Service
-        new_user = SecurityService.register_user(
-            person_data=data['person'],
-            user_data=data['user'],
-            role_name=data['role']
-        )
-        return jsonify({
-            "message": "Usuario registrado con éxito", 
-            "data": new_user
-        }), 201
-        
-    except Exception as e:
-        # Captura de errores (ej. usuario o documento duplicado)
-        return jsonify({"error": str(e)}), 500
-    
-@security_bp.route('/login', methods=['POST'])
-def login():
-    """Ruta para autenticarse y obtener un token JWT."""
-    data = request.get_json()
-    
-    if not data or 'username' not in data or 'password' not in data:
-        return jsonify({"error": "Faltan credenciales (username y password)"}), 400
-        
-    try:
-        result = SecurityService.login(
+        result = SecurityService.register_user(
+            first_name=data['first_name'],
+            last_name=data['last_name'],
+            document_id=data['document_id'],
             username=data['username'],
-            password=data['password']
+            password=data['password'],
+            role_name=data['role_name']
         )
-        return jsonify(result), 200
-        
-    except ValueError as e:
-        # Error 401 Unauthorized si la clave está mal
-        return jsonify({"error": str(e)}), 401 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ==========================================
-# RUTAS CRUD DE ROLES
-# ==========================================
-
-@security_bp.route('/roles', methods=['POST'])
-@jwt_required()
-def create_role():
-    """Ruta para crear un nuevo rol en el sistema."""
-    data = request.get_json()
-    if not data or 'name' not in data:
-        return jsonify({"error": "Falta el campo 'name'"}), 400
-    try:
-        new_role = SecurityService.create_role(
-            name=data['name'],
-            description=data.get('description')
-        )
-        return jsonify({"message": "Rol creado con éxito", "data": new_role}), 201
+        return jsonify({"message": "Usuario registrado exitosamente",
+                        "data": result}), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@security_bp.route('/roles', methods=['GET'])
-@jwt_required()
-def get_all_roles():
-    """Ruta para consultar todos los roles activos."""
-    try:
-        roles = SecurityService.get_all_roles()
-        return jsonify({"message": "Roles recuperados con éxito", "data": roles}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
-@security_bp.route('/roles/<int:role_id>', methods=['GET'])
-@jwt_required()
-def get_role(role_id):
-    """Ruta para consultar un rol específico por su ID."""
-    try:
-        role = SecurityService.get_role_by_id(role_id)
-        return jsonify({"message": "Rol recuperado con éxito", "data": role}), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@security_bp.route('/roles/<int:role_id>', methods=['PUT'])
-@jwt_required()
-def update_role(role_id):
-    """Ruta para actualizar los datos de un rol existente."""
+# ── LOGIN ─────────────────────────────────────────────────────────────────────
+@security_bp.route('/login', methods=['POST'])
+def login():
     data = request.get_json()
-    if not data:
-        return jsonify({"error": "Faltan datos a actualizar"}), 400
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify({"error": "Se requiere 'username' y 'password'"}), 400
     try:
-        updated = SecurityService.update_role(
-            role_id,
-            name=data.get('name'),
-            description=data.get('description')
+        user_data = SecurityService.login_user(
+            username=data['username'],
+            password=data['password']
         )
-        return jsonify({"message": "Rol actualizado con éxito", "data": updated}), 200
+        # El JWT lleva el user_id como identity y los roles en claims
+        access_token = create_access_token(
+            identity=str(user_data['user_id']),
+            additional_claims={"roles": user_data['roles']}
+        )
+        return jsonify({
+            "message": "Login exitoso",
+            "access_token": access_token,
+            "user": user_data
+        }), 200
     except ValueError as e:
-        return jsonify({"error": str(e)}), 404
+        return jsonify({"error": str(e)}), 401
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@security_bp.route('/roles/<int:role_id>', methods=['DELETE'])
+
+# ── LOGOUT ────────────────────────────────────────────────────────────────────
+@security_bp.route('/logout', methods=['POST'])
 @jwt_required()
-def delete_role(role_id):
-    """Ruta para desactivar un rol (Soft Delete)."""
+def logout():
     try:
-        result = SecurityService.soft_delete_role(role_id)
+        jwt_data = get_jwt()
+        jti = jwt_data['jti']
+        user_id = int(get_jwt_identity())
+        # Calcular cuándo expira el token para registrarlo en blacklist
+        exp_timestamp = jwt_data['exp']
+        expires_at = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+        result = SecurityService.logout_user(
+            jti=jti,
+            user_id=user_id,
+            expires_at=expires_at
+        )
         return jsonify(result), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ==========================================
-# RUTAS CRUD DE PERSONAS
-# ==========================================
 
-@security_bp.route('/persons', methods=['GET'])
-@jwt_required()
-def get_all_persons():
-    """Ruta para consultar todas las personas activas registradas."""
-    try:
-        persons = SecurityService.get_all_persons()
-        return jsonify({"message": "Personas recuperadas con éxito", "data": persons}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@security_bp.route('/persons/<int:person_id>', methods=['GET'])
-@jwt_required()
-def get_person(person_id):
-    """Ruta para consultar una persona específica por su ID."""
-    try:
-        person = SecurityService.get_person_by_id(person_id)
-        return jsonify({"message": "Persona recuperada con éxito", "data": person}), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@security_bp.route('/persons/<int:person_id>', methods=['PUT'])
-@jwt_required()
-def update_person(person_id):
-    """Ruta para actualizar los datos de una persona (nombre, apellido, documento)."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Faltan datos a actualizar"}), 400
-    try:
-        updated = SecurityService.update_person(person_id, data)
-        return jsonify({"message": "Persona actualizada con éxito", "data": updated}), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@security_bp.route('/persons/<int:person_id>', methods=['DELETE'])
-@jwt_required()
-def delete_person(person_id):
-    """Ruta para desactivar una persona (Soft Delete)."""
-    try:
-        result = SecurityService.soft_delete_person(person_id)
-        return jsonify(result), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# ==========================================
-# RUTAS CRUD DE USUARIOS
-# ==========================================
-
+# ── USUARIOS ──────────────────────────────────────────────────────────────────
 @security_bp.route('/users', methods=['GET'])
 @jwt_required()
-def get_all_users():
-    """Ruta para consultar todos los usuarios activos del sistema."""
+def get_users():
     try:
-        users = SecurityService.get_all_users()
-        return jsonify({"message": "Usuarios recuperados con éxito", "data": users}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@security_bp.route('/users/<int:user_id>', methods=['GET'])
-@jwt_required()
-def get_user(user_id):
-    """Ruta para consultar un usuario específico por su ID."""
-    try:
-        user = SecurityService.get_user_by_id(user_id)
-        return jsonify({"message": "Usuario recuperado con éxito", "data": user}), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@security_bp.route('/users/<int:user_id>', methods=['PUT'])
-@jwt_required()
-def update_user(user_id):
-    """Ruta para actualizar un usuario (contraseña y/o rol)."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Faltan datos a actualizar (password y/o role)"}), 400
-    try:
-        updated = SecurityService.update_user(user_id, data)
-        return jsonify({"message": "Usuario actualizado con éxito", "data": updated}), 200
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
+        return jsonify({"data": SecurityService.get_all_users()}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @security_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @jwt_required()
 def delete_user(user_id):
-    """Ruta para desactivar un usuario (Soft Delete)."""
     try:
-        result = SecurityService.soft_delete_user(user_id)
-        return jsonify(result), 200
+        return jsonify(SecurityService.soft_delete_user(user_id)), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@security_bp.route('/users/<int:user_id>/roles', methods=['GET'])
+@jwt_required()
+def get_user_roles(user_id):
+    try:
+        return jsonify({"data": SecurityService.get_user_roles(user_id)}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+@security_bp.route('/users/<int:user_id>/roles', methods=['POST'])
+@jwt_required()
+def assign_role_to_user(user_id):
+    data = request.get_json()
+    if not data or 'role_id' not in data:
+        return jsonify({"error": "Se requiere 'role_id'"}), 400
+    try:
+        return jsonify(SecurityService.assign_role_to_user(
+            user_id, data['role_id'])), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+@security_bp.route('/users/<int:user_id>/roles/<int:role_id>',
+                   methods=['DELETE'])
+@jwt_required()
+def revoke_role_from_user(user_id, role_id):
+    try:
+        return jsonify(SecurityService.revoke_role_from_user(
+            user_id, role_id)), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+# ── ROLES ─────────────────────────────────────────────────────────────────────
+@security_bp.route('/roles', methods=['POST'])
+@jwt_required()
+def create_role():
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify({"error": "Se requiere 'name'"}), 400
+    try:
+        return jsonify({"message": "Rol creado",
+                        "data": SecurityService.create_role(
+                            name=data['name'],
+                            description=data.get('description'))}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+@security_bp.route('/roles', methods=['GET'])
+@jwt_required()
+def get_roles():
+    try:
+        return jsonify({"data": SecurityService.get_all_roles()}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@security_bp.route('/roles/<int:role_id>', methods=['DELETE'])
+@jwt_required()
+def delete_role(role_id):
+    try:
+        return jsonify(SecurityService.soft_delete_role(role_id)), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+@security_bp.route('/roles/<int:role_id>/permissions', methods=['GET'])
+@jwt_required()
+def get_role_permissions(role_id):
+    try:
+        return jsonify({"data": SecurityService.get_role_permissions(
+            role_id)}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+@security_bp.route('/roles/<int:role_id>/permissions', methods=['POST'])
+@jwt_required()
+def assign_permission_to_role(role_id):
+    data = request.get_json()
+    if not data or 'permission_id' not in data:
+        return jsonify({"error": "Se requiere 'permission_id'"}), 400
+    try:
+        return jsonify(SecurityService.assign_permission_to_role(
+            role_id, data['permission_id'])), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+@security_bp.route('/roles/<int:role_id>/permissions/<int:permission_id>',
+                   methods=['DELETE'])
+@jwt_required()
+def revoke_permission_from_role(role_id, permission_id):
+    try:
+        return jsonify(SecurityService.revoke_permission_from_role(
+            role_id, permission_id)), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+# ── PERMISOS ──────────────────────────────────────────────────────────────────
+@security_bp.route('/permissions', methods=['POST'])
+@jwt_required()
+def create_permission():
+    data = request.get_json()
+    if not data or 'name' not in data:
+        return jsonify({"error": "Se requiere 'name'"}), 400
+    try:
+        return jsonify({"message": "Permiso creado",
+                        "data": SecurityService.create_permission(
+                            name=data['name'],
+                            description=data.get('description'))}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+@security_bp.route('/permissions', methods=['GET'])
+@jwt_required()
+def get_permissions():
+    try:
+        return jsonify({"data": SecurityService.get_all_permissions()}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@security_bp.route('/permissions/<int:permission_id>', methods=['DELETE'])
+@jwt_required()
+def delete_permission(permission_id):
+    try:
+        return jsonify(SecurityService.soft_delete_permission(
+            permission_id)), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
