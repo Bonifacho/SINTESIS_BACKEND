@@ -209,3 +209,28 @@ class AttemptAnswer(db.Model):
     selected_option_id = db.Column(db.Integer, db.ForeignKey('exam_options.id'), nullable=False)
     answered_at        = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_active          = db.Column(db.Boolean, default=True, nullable=False)
+    
+class GroupObserver(db.Model):
+    """
+    Controla qué practicantes pueden observar qué grupos.
+    El rol define QUÉ puede hacer (solo leer).
+    Esta tabla define A QUÉ grupos puede acceder.
+    Sin registro activo aquí, el practicante recibe 403.
+    """
+    __tablename__ = 'academic_group_observers'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    group_id    = db.Column(db.Integer, db.ForeignKey('academic_groups.id'),
+                            nullable=False)
+    observer_id = db.Column(db.Integer, db.ForeignKey('users.id'),
+                            nullable=False)
+    assigned_by = db.Column(db.Integer, db.ForeignKey('users.id'),
+                            nullable=False)
+    created_at  = db.Column(db.DateTime,
+                            default=lambda: datetime.now(timezone.utc))
+    is_active   = db.Column(db.Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('group_id', 'observer_id',
+                            name='uq_group_observer'),
+    )

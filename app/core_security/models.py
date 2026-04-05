@@ -125,3 +125,9 @@ class BlacklistedToken(db.Model):
     blacklisted_at  = db.Column(db.DateTime,
                                 default=lambda: datetime.now(timezone.utc))
     expires_at      = db.Column(db.DateTime, nullable=False)
+    
+    
+# ─────────────────────────────────────────────────────────────────────────────
+# CAPA 5 — Acceso de practicantes a grupos (nuevo)
+# ─────────────────────────────────────────────────────────────────────────────
+
