@@ -4,7 +4,8 @@ from app.core_academic.models import (
     Group, Enrollment, Topic,
     OVA, OVAResource,
     Exam, Question, Option, AnswerKey,
-    ExamAttempt, AttemptAnswer
+    ExamAttempt, AttemptAnswer,
+    GroupObserver
 )
 
 
@@ -195,3 +196,27 @@ class AcademicRepository:
         return db.session.query(AttemptAnswer).filter_by(
             attempt_id=attempt_id, is_active=True
         ).all()
+        
+# ── OBSERVADORES (PRACTICANTES) ───────────────────────────────────────────
+    @staticmethod
+    def create_observer(observer: GroupObserver) -> GroupObserver:
+        db.session.add(observer)
+        db.session.commit()
+        return observer
+
+    @staticmethod
+    def get_observer_by_id(observer_id: int) -> GroupObserver:
+        return db.session.query(GroupObserver).filter_by(
+            id=observer_id).first()
+
+    @staticmethod
+    def get_observer_by_group_and_user(group_id: int,
+                                       observer_id: int) -> GroupObserver:
+        return db.session.query(GroupObserver).filter_by(
+            group_id=group_id, observer_id=observer_id,
+            is_active=True).first()
+
+    @staticmethod
+    def get_observers_by_group(group_id: int):
+        return db.session.query(GroupObserver).filter_by(
+            group_id=group_id, is_active=True).all()
