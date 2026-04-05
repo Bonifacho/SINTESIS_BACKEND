@@ -401,3 +401,41 @@ def get_attempt_result(attempt_id):
             attempt_id)}), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
+    
+    
+# ── OBSERVADORES (PRACTICANTES) ───────────────────────────────────────────────
+@academic_bp.route('/groups/<int:group_id>/observers', methods=['POST'])
+@jwt_required()
+def assign_observer(group_id):
+    data = request.get_json()
+    if not data or 'observer_id' not in data or 'assigned_by' not in data:
+        return jsonify({"error": "Se requiere 'observer_id' y 'assigned_by'"}), 400
+    try:
+        return jsonify({"message": "Practicante asignado al grupo",
+                        "data": AcademicService.assign_observer(
+                            group_id=group_id,
+                            observer_id=data['observer_id'],
+                            assigned_by=data['assigned_by'])}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@academic_bp.route('/groups/<int:group_id>/observers', methods=['GET'])
+@jwt_required()
+def get_observers(group_id):
+    try:
+        return jsonify({"data": AcademicService.get_observers_by_group(
+            group_id)}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@academic_bp.route('/observers/<int:observer_id>', methods=['DELETE'])
+@jwt_required()
+def revoke_observer(observer_id):
+    try:
+        return jsonify(AcademicService.revoke_observer(observer_id)), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
