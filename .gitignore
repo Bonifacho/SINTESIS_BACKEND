@@ -26,3 +26,6 @@ AGENTES.md
 
 # archivo de guion para el video temporal
 guion_video.txt
+
+# Archivo actualización contexto agentes
+update_context.py
