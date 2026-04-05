@@ -5,7 +5,8 @@ from app.core_academic.models import (
     Group, Enrollment, Topic,
     OVA, OVAResource, ResourceType,
     Exam, Question, Option, AnswerKey,
-    ExamAttempt, AttemptAnswer
+    ExamAttempt, AttemptAnswer,
+    GroupObserver
 )
 from app.core_academic.repositories import AcademicRepository
 
@@ -469,3 +470,64 @@ class AcademicService:
             "passing_score": exam.passing_score,
             "submitted_at": attempt.submitted_at.isoformat()
         }
+        
+# ── OBSERVADORES (PRACTICANTES) ───────────────────────────────────────────
+    @staticmethod
+    def assign_observer(group_id: int, observer_id: int,
+                        assigned_by: int) -> dict:
+        """Docente asigna un practicante a un grupo."""
+        group = AcademicRepository.get_group_by_id(group_id)
+        if not group or not group.is_active:
+            raise ValueError("Grupo no encontrado o inactivo")
+
+        existing = AcademicRepository.get_observer_by_group_and_user(
+            group_id, observer_id)
+        if existing:
+            raise ValueError("Este practicante ya tiene acceso a ese grupo")
+
+        observer = GroupObserver(
+            group_id=group_id,
+            observer_id=observer_id,
+            assigned_by=assigned_by
+        )
+        created = AcademicRepository.create_observer(observer)
+        return {
+            "id": created.id,
+            "group_id": created.group_id,
+            "observer_id": created.observer_id,
+            "assigned_by": created.assigned_by,
+            "created_at": created.created_at.isoformat(),
+            "is_active": created.is_active
+        }
+
+    @staticmethod
+    def revoke_observer(observer_id: int) -> dict:
+        """Docente revoca el acceso de un practicante."""
+        observer = AcademicRepository.get_observer_by_id(observer_id)
+        if not observer or not observer.is_active:
+            raise ValueError("Acceso no encontrado o ya revocado")
+        observer.is_active = False
+        db.session.commit()
+        return {"message": f"Acceso del practicante {observer_id} revocado"}
+
+    @staticmethod
+    def get_observers_by_group(group_id: int) -> list:
+        """Lista todos los practicantes asignados a un grupo."""
+        group = AcademicRepository.get_group_by_id(group_id)
+        if not group or not group.is_active:
+            raise ValueError("Grupo no encontrado o inactivo")
+        observers = AcademicRepository.get_observers_by_group(group_id)
+        return [{
+            "id": o.id,
+            "observer_id": o.observer_id,
+            "assigned_by": o.assigned_by,
+            "created_at": o.created_at.isoformat(),
+            "is_active": o.is_active
+        } for o in observers]
+
+    @staticmethod
+    def check_observer_access(group_id: int, user_id: int) -> bool:
+        """Verifica si un practicante tiene acceso a un grupo específico."""
+        result = AcademicRepository.get_observer_by_group_and_user(
+            group_id, user_id)
+        return result is not None
