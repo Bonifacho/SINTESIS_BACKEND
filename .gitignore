@@ -20,7 +20,7 @@ instance/
 .vscode/
 
 # Archivo de contexto para agentes
-CONTEXTO_UNIVERSAL_PROYECTO.md
+UNIVERSAL_PROYECT_SINTESIS_CONTEXT.md
 AGENTES.md 
 
 
