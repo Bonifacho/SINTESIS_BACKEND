@@ -228,3 +228,16 @@ def delete_permission(permission_id):
             permission_id)), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
+    
+    
+@security_bp.route('/users/<int:user_id>', methods=['PUT'])
+@jwt_required()
+def update_user_profile(user_id):
+    data = request.get_json()
+    try:
+        result = SecurityService.update_user_profile(user_id, data)
+        return jsonify({"status": "success", "data": result}), 200
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 404
+    except Exception as e:
+        return jsonify({"status": "error", "message": "Error interno del servidor"}), 500

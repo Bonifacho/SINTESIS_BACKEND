@@ -220,3 +220,23 @@ class AcademicRepository:
     def get_observers_by_group(group_id: int):
         return db.session.query(GroupObserver).filter_by(
             group_id=group_id, is_active=True).all()
+        
+    @staticmethod
+    def get_groups_by_user(user_id: int) -> list:
+        from app.core_academic.models import Group, Enrollment
+        # 1. Traer los grupos donde es docente
+        teacher_groups = Group.query.filter_by(teacher_id=user_id, is_active=True).all()
+        
+        # 2. Traer los grupos donde está matriculado como estudiante
+        enrollments = Enrollment.query.filter_by(student_id=user_id, is_active=True).all()
+        student_groups = [e.group for e in enrollments if e.group and e.group.is_active]
+        
+        # Combinar ambos (por si un usuario tiene rol mixto)
+        all_groups = list({g.id: g for g in (teacher_groups + student_groups)}.values())
+        return all_groups
+
+    @staticmethod
+    def get_topics_by_group(group_id: int) -> list:
+        from app.core_academic.models import Topic
+        return Topic.query.filter_by(group_id=group_id, is_active=True).order_by(Topic.order_index).all()    
+    

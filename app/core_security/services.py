@@ -271,3 +271,19 @@ class SecurityService:
         user.is_active = False
         db.session.commit()
         return {"message": f"Usuario {user_id} desactivado (Soft Delete)"}
+    
+    @staticmethod
+    def update_user_profile(user_id: int, data: dict) -> dict:
+        user = SecurityRepository.get_user_by_id(user_id)
+        if not user or not user.is_active:
+            raise ValueError("Usuario no encontrado o inactivo")
+        
+        person = SecurityRepository.get_person_by_id(user.person_id)
+        if person:
+            if 'first_name' in data: person.first_name = data['first_name']
+            if 'last_name' in data: person.last_name = data['last_name']
+            if 'document_id' in data: person.document_id = data['document_id']
+            
+        from app.extensions import db
+        db.session.commit()
+        return {"message": "Perfil actualizado exitosamente"}

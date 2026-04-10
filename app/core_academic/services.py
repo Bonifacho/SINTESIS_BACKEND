@@ -531,3 +531,13 @@ class AcademicService:
         result = AcademicRepository.get_observer_by_group_and_user(
             group_id, user_id)
         return result is not None
+    
+    @staticmethod
+    def get_user_groups(user_id: int) -> list:
+        groups = AcademicRepository.get_groups_by_user(user_id)
+        return [{"id": g.id, "name": g.name, "teacher_id": g.teacher_id} for g in groups]
+
+    @staticmethod
+    def get_group_topics(group_id: int) -> list:
+        topics = AcademicRepository.get_topics_by_group(group_id)
+        return [{"id": t.id, "title": t.title, "order_index": t.order_index} for t in topics]

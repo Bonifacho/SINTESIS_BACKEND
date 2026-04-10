@@ -439,3 +439,21 @@ def revoke_observer(observer_id):
         return jsonify(AcademicService.revoke_observer(observer_id)), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
+    
+@academic_bp.route('/users/<int:user_id>/groups', methods=['GET'])
+@jwt_required()
+def get_user_groups(user_id):
+    try:
+        result = AcademicService.get_user_groups(user_id)
+        return jsonify({"status": "success", "data": result}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@academic_bp.route('/groups/<int:group_id>/topics', methods=['GET'])
+@jwt_required()
+def get_group_topics(group_id):
+    try:
+        result = AcademicService.get_group_topics(group_id)
+        return jsonify({"status": "success", "data": result}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
