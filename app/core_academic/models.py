@@ -234,3 +234,23 @@ class GroupObserver(db.Model):
         db.UniqueConstraint('group_id', 'observer_id',
                             name='uq_group_observer'),
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CAPA 5 — Tracking silencioso de consumo de recursos
+# ─────────────────────────────────────────────────────────────────────────────
+
+class StudentProgress(db.Model):
+    """
+    Registra cada evento de acceso de un estudiante a un recurso educativo
+    (OVA). Es una tabla append-only alimentada por el tracking silencioso
+    del frontend móvil. Nunca se modifica ni se borra físicamente.
+    """
+    __tablename__ = 'student_progress'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    ova_id     = db.Column(db.Integer, db.ForeignKey('academic_ovas.id'), nullable=False)
+    action     = db.Column(db.String(50), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True),
+                           default=lambda: datetime.now(timezone.utc))

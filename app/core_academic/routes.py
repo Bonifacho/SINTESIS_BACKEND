@@ -457,3 +457,23 @@ def get_group_topics(group_id):
         return jsonify({"status": "success", "data": result}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ── PROGRESO (TRACKING SILENCIOSO) ────────────────────────────────────────
+@academic_bp.route('/progress', methods=['POST'])
+@jwt_required()
+def register_progress():
+    data = request.get_json()
+    if not data or 'user_id' not in data or 'ova_id' not in data or 'action' not in data:
+        return jsonify({"error": "Se requiere 'user_id', 'ova_id' y 'action'"}), 400
+    try:
+        result = AcademicService.register_progress(
+            user_id=data['user_id'],
+            ova_id=data['ova_id'],
+            action=data['action'])
+        return jsonify({"message": "Progreso registrado",
+                        "data": {"id": result["id"]}}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

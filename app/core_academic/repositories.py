@@ -239,4 +239,10 @@ class AcademicRepository:
     def get_topics_by_group(group_id: int) -> list:
         from app.core_academic.models import Topic
         return Topic.query.filter_by(group_id=group_id, is_active=True).order_by(Topic.order_index).all()    
-    
+
+    # ── PROGRESO (TRACKING SILENCIOSO) ────────────────────────────────────
+    @staticmethod
+    def create_progress(progress) -> 'StudentProgress':
+        db.session.add(progress)
+        db.session.commit()
+        return progress

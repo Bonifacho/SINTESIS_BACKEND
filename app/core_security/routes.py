@@ -16,17 +16,18 @@ security_bp = Blueprint('security', __name__, url_prefix='/api/v1/security')
 def register():
     data = request.get_json()
     required = ['first_name', 'last_name', 'document_id',
-                 'username', 'password', 'role_name']
+                 'username', 'password']
     if not data or not all(k in data for k in required):
         return jsonify({"error": f"Se requieren: {required}"}), 400
     try:
+        # El rol "estudiante" se asigna internamente en el servicio.
+        # Cualquier role_name enviado por el cliente es IGNORADO.
         result = SecurityService.register_user(
             first_name=data['first_name'],
             last_name=data['last_name'],
             document_id=data['document_id'],
             username=data['username'],
-            password=data['password'],
-            role_name=data['role_name']
+            password=data['password']
         )
         return jsonify({"message": "Usuario registrado exitosamente",
                         "data": result}), 201
