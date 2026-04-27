@@ -6,7 +6,8 @@ from app.core_academic.models import (
     OVA, OVAResource, ResourceType,
     Exam, Question, Option, AnswerKey,
     ExamAttempt, AttemptAnswer,
-    GroupObserver
+    GroupObserver,
+    StudentProgress
 )
 from app.core_academic.repositories import AcademicRepository
 
@@ -541,3 +542,24 @@ class AcademicService:
     def get_group_topics(group_id: int) -> list:
         topics = AcademicRepository.get_topics_by_group(group_id)
         return [{"id": t.id, "title": t.title, "order_index": t.order_index} for t in topics]
+
+    # ── PROGRESO (TRACKING SILENCIOSO) ────────────────────────────────────
+    VALID_ACTIONS = {"exam_started", "exam_opened", "resource_opened"}
+
+    @staticmethod
+    def register_progress(user_id: int, ova_id: int, action: str) -> dict:
+        """Registra un evento de acceso silencioso del estudiante."""
+        if action not in AcademicService.VALID_ACTIONS:
+            raise ValueError(
+                f"Acción inválida '{action}'. "
+                f"Valores permitidos: {AcademicService.VALID_ACTIONS}")
+        progress = StudentProgress(
+            user_id=user_id, ova_id=ova_id, action=action)
+        created = AcademicRepository.create_progress(progress)
+        return {
+            "id": created.id,
+            "user_id": created.user_id,
+            "ova_id": created.ova_id,
+            "action": created.action,
+            "created_at": created.created_at.isoformat()
+        }

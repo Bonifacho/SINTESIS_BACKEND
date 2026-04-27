@@ -14,20 +14,31 @@ class SecurityService:
     # ── REGISTRO ──────────────────────────────────────────────────────────────
     @staticmethod
     def register_user(first_name: str, last_name: str, document_id: str,
-                      username: str, password: str, role_name: str) -> dict:
-        """Crea una Persona, un Usuario y le asigna un rol en una sola operación."""
+                      username: str, password: str, **kwargs) -> dict:
+        """Crea una Persona, un Usuario y le asigna el rol 'estudiante'.
 
+        Regla de negocio: la app móvil SOLO permite registrar estudiantes.
+        Cualquier rol enviado por el cliente es IGNORADO por completo.
+        Los roles superiores se administran desde el portal web externo.
+        """
+
+        # ── Validaciones de unicidad ──────────────────────────────────────
         if SecurityRepository.get_person_by_document(document_id):
             raise ValueError("Ya existe una persona con ese documento")
 
         if SecurityRepository.get_user_by_username(username):
             raise ValueError("El nombre de usuario ya está en uso")
 
-        role = SecurityRepository.get_role_by_name(role_name)
-        if not role or not role.is_active:
-            raise ValueError(f"El rol '{role_name}' no existe o está inactivo")
+        # ── Forzar rol "estudiante" (regla innegociable) ──────────────────
+        # Se IGNORA cualquier role_name / role_id que venga en el payload.
+        student_role = SecurityRepository.get_role_by_name("estudiante")
+        if not student_role or not student_role.is_active:
+            raise ValueError(
+                "El rol 'estudiante' no existe o está inactivo en la base de datos. "
+                "Contacte al administrador del sistema."
+            )
 
-        # Crear persona
+        # ── Crear persona ─────────────────────────────────────────────────
         person = Person(
             first_name=first_name,
             last_name=last_name,
@@ -35,7 +46,7 @@ class SecurityService:
         )
         SecurityRepository.create_person(person)
 
-        # Crear usuario vinculado a la persona
+        # ── Crear usuario vinculado a la persona ─────────────────────────
         user = User(
             username=username,
             password_hash=generate_password_hash(password),
@@ -43,15 +54,15 @@ class SecurityService:
         )
         SecurityRepository.create_user(user)
 
-        # Asignar rol
-        user_role = UserHasRole(user_id=user.id, role_id=role.id)
+        # ── Asignar rol estudiante ────────────────────────────────────────
+        user_role = UserHasRole(user_id=user.id, role_id=student_role.id)
         SecurityRepository.assign_role_to_user(user_role)
 
         return {
             "id": user.id,
             "username": user.username,
             "full_name": f"{person.first_name} {person.last_name}",
-            "role": role_name
+            "role": student_role.name
         }
 
     # ── LOGIN ─────────────────────────────────────────────────────────────────
