@@ -458,6 +458,44 @@ def get_group_topics(group_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@academic_bp.route('/topics/<int:topic_id>/ovas', methods=['GET'])
+@jwt_required()
+def get_topic_ovas(topic_id):
+    try:
+        result = AcademicService.get_ovas_by_topic(topic_id)
+        return jsonify({"status": "success", "data": result}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@academic_bp.route('/exams/by-ova/<int:ova_id>', methods=['GET'])
+@jwt_required()
+def get_exam_by_ova_full(ova_id):
+    try:
+        result = AcademicService.get_exam_by_ova_full(ova_id)
+        return jsonify({"status": "success", "data": result}), 200
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 404
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@academic_bp.route('/students/<int:student_id>/attempts', methods=['GET'])
+@jwt_required()
+def get_student_attempts(student_id):
+    try:
+        result = AcademicService.get_attempts_by_student(student_id)
+        return jsonify({"status": "success", "data": result}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@academic_bp.route('/groups/<int:group_id>/attempts', methods=['GET'])
+@jwt_required()
+def get_group_attempts(group_id):
+    try:
+        result = AcademicService.get_attempts_by_group(group_id)
+        return jsonify({"status": "success", "data": result}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 # ── PROGRESO (TRACKING SILENCIOSO) ────────────────────────────────────────
 @academic_bp.route('/progress', methods=['POST'])
