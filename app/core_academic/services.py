@@ -446,6 +446,19 @@ class AcademicService:
     def _calculate_result(attempt_id: int) -> dict:
         attempt = AcademicRepository.get_attempt_by_id(attempt_id)
         exam = AcademicRepository.get_exam_by_id(attempt.exam_id)
+        if not attempt.submitted_at:
+            return {
+                "attempt_id": attempt_id,
+                "exam_id": attempt.exam_id,
+                "student_id": attempt.student_id,
+                "score": 0,
+                "passed": False,
+                "correct_answers": 0,
+                "total_questions": 0,
+                "passing_score": exam.passing_score if exam else 0,
+                "submitted_at": None,
+                "status": "in_progress"
+            }
         student_answers = AcademicRepository.get_answers_by_attempt(attempt_id)
         student_map = {a.question_id: a.selected_option_id
                        for a in student_answers}
@@ -469,7 +482,8 @@ class AcademicService:
             "correct_answers": correct_count,
             "total_questions": total_questions,
             "passing_score": exam.passing_score,
-            "submitted_at": attempt.submitted_at.isoformat()
+            "submitted_at": attempt.submitted_at.isoformat(),
+            "status": "completed"
         }
         
 # ── OBSERVADORES (PRACTICANTES) ───────────────────────────────────────────
@@ -542,6 +556,45 @@ class AcademicService:
     def get_group_topics(group_id: int) -> list:
         topics = AcademicRepository.get_topics_by_group(group_id)
         return [{"id": t.id, "title": t.title, "order_index": t.order_index} for t in topics]
+
+    @staticmethod
+    def get_ovas_by_topic(topic_id: int) -> list:
+        ovas = AcademicRepository.get_ovas_by_topic(topic_id)
+        return [{"id": o.id, "title": o.title, "description": o.description, "order_index": o.order_index} for o in ovas]
+
+    @staticmethod
+    def get_exam_by_ova_full(ova_id: int) -> dict:
+        exam = AcademicRepository.get_exam_by_ova(ova_id)
+        if not exam or not exam.is_active:
+            raise ValueError("Examen no encontrado o inactivo")
+        questions = AcademicRepository.get_questions_by_exam(exam.id)
+        qs_data = []
+        for q in questions:
+            options = AcademicRepository.get_options_by_question(q.id)
+            qs_data.append({
+                "id": q.id,
+                "statement": q.statement,
+                "points": q.points,
+                "order_index": q.order_index,
+                "options": [{"id": o.id, "text": o.text, "order_index": o.order_index} for o in options]
+            })
+        return {
+            "id": exam.id,
+            "title": exam.title,
+            "passing_score": exam.passing_score,
+            "max_attempts": exam.max_attempts,
+            "questions": qs_data
+        }
+
+    @staticmethod
+    def get_attempts_by_student(student_id: int) -> list:
+        attempts = AcademicRepository.get_attempts_by_student(student_id)
+        return [AcademicService._calculate_result(a.id) for a in attempts]
+
+    @staticmethod
+    def get_attempts_by_group(group_id: int) -> list:
+        attempts = AcademicRepository.get_attempts_by_group(group_id)
+        return [AcademicService._calculate_result(a.id) for a in attempts]
 
     # ── PROGRESO (TRACKING SILENCIOSO) ────────────────────────────────────
     VALID_ACTIONS = {"exam_started", "exam_opened", "resource_opened"}
