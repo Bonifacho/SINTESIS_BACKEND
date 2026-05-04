@@ -20,8 +20,8 @@ def register():
     if not data or not all(k in data for k in required):
         return jsonify({"error": f"Se requieren: {required}"}), 400
     try:
-        # El rol "estudiante" se asigna internamente en el servicio.
-        # Cualquier role_name enviado por el cliente es IGNORADO.
+        # El rol "estudiante" se asigna por defecto en el servicio.
+        # Cualquier role_name enviado por el cliente es IGNORADO en este endpoint público.
         result = SecurityService.register_user(
             first_name=data['first_name'],
             last_name=data['last_name'],
@@ -30,6 +30,35 @@ def register():
             password=data['password']
         )
         return jsonify({"message": "Usuario registrado exitosamente",
+                        "data": result}), 201
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@security_bp.route('/admin/register', methods=['POST'])
+@jwt_required()
+def admin_register():
+    # Verificar que el usuario tenga rol de administrador
+    current_user_id = int(get_jwt_identity())
+    roles = SecurityService.get_user_roles(current_user_id)
+    if not any(role['name'] == 'administrador' for role in roles):
+        return jsonify({"error": "No tienes permisos de administrador"}), 403
+
+    data = request.get_json()
+    required = ['first_name', 'last_name', 'document_id', 'username', 'password', 'role_name']
+    if not data or not all(k in data for k in required):
+        return jsonify({"error": f"Se requieren: {required}"}), 400
+    try:
+        result = SecurityService.register_user(
+            first_name=data['first_name'],
+            last_name=data['last_name'],
+            document_id=data['document_id'],
+            username=data['username'],
+            password=data['password'],
+            role_name=data['role_name']
+        )
+        return jsonify({"message": "Usuario registrado exitosamente por administrador",
                         "data": result}), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
