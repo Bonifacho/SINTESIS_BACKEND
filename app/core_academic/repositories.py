@@ -184,6 +184,21 @@ class AcademicRepository:
             student_id=student_id, exam_id=exam_id, is_active=True
         ).all()
 
+    @staticmethod
+    def get_attempts_by_student(student_id: int):
+        return db.session.query(ExamAttempt).filter_by(
+            student_id=student_id, is_active=True
+        ).all()
+
+    @staticmethod
+    def get_attempts_by_group(group_id: int):
+        return (
+            db.session.query(ExamAttempt)
+            .join(Enrollment, ExamAttempt.student_id == Enrollment.student_id)
+            .filter(Enrollment.group_id == group_id, Enrollment.is_active == True, ExamAttempt.is_active == True)
+            .all()
+        )
+
     # ── RESPUESTAS DEL INTENTO ────────────────────────────────────────────────
     @staticmethod
     def create_attempt_answer(answer: AttemptAnswer) -> AttemptAnswer:
