@@ -13,6 +13,7 @@ class Person(db.Model):
     first_name  = db.Column(db.String(100), nullable=False)
     last_name   = db.Column(db.String(100), nullable=False)
     document_id = db.Column(db.String(50), unique=True, nullable=False)
+    email       = db.Column(db.String(120), nullable=True)
     created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_active   = db.Column(db.Boolean, default=True, nullable=False)
 
