@@ -71,6 +71,9 @@ class SecurityService:
         if not check_password_hash(user.password_hash, password):
             raise ValueError("Contraseña incorrecta")
 
+        # Obtener datos de la persona asociada
+        person = SecurityRepository.get_person_by_id(user.person_id)
+
         # Obtener roles activos del usuario
         user_roles = SecurityRepository.get_roles_by_user(user.id)
         role_names = []
@@ -82,6 +85,8 @@ class SecurityService:
         return {
             "user_id": user.id,
             "username": user.username,
+            "full_name": f"{person.first_name} {person.last_name}" if person else "",
+            "email": (person.email or "") if person else "",
             "roles": role_names
         }
 
