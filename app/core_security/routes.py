@@ -1,12 +1,13 @@
 # app/core_security/routes.py
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import (
-    create_access_token, jwt_required,
+    create_access_token, create_refresh_token, jwt_required,
     get_jwt_identity, get_jwt
 )
 from datetime import datetime, timezone, timedelta
 from app.core_security.services import SecurityService
 from app.core_security.repositories import SecurityRepository
+from app.utils.decorators import role_required
 
 security_bp = Blueprint('security', __name__, url_prefix='/api/v1/security')
 
@@ -37,14 +38,8 @@ def register():
         return jsonify({"error": str(e)}), 500
 
 @security_bp.route('/admin/register', methods=['POST'])
-@jwt_required()
+@role_required('administrador')
 def admin_register():
-    # Verificar que el usuario tenga rol de administrador
-    current_user_id = int(get_jwt_identity())
-    roles = SecurityService.get_user_roles(current_user_id)
-    if not any(role['name'] == 'administrador' for role in roles):
-        return jsonify({"error": "No tienes permisos de administrador"}), 403
-
     data = request.get_json()
     required = ['first_name', 'last_name', 'document_id', 'username', 'password', 'role_name']
     if not data or not all(k in data for k in required):
@@ -78,17 +73,42 @@ def login():
             password=data['password']
         )
         # El JWT lleva el user_id como identity y los roles en claims
+        additional_claims = {"roles": user_data['roles']}
         access_token = create_access_token(
             identity=str(user_data['user_id']),
-            additional_claims={"roles": user_data['roles']}
+            additional_claims=additional_claims
+        )
+        refresh_token = create_refresh_token(
+            identity=str(user_data['user_id'])
         )
         return jsonify({
             "message": "Login exitoso",
             "access_token": access_token,
+            "refresh_token": refresh_token,
             "user": user_data
         }), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── REFRESH TOKEN ─────────────────────────────────────────────────────────
+@security_bp.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh():
+    """Renueva el access_token usando un refresh_token válido."""
+    try:
+        user_id = get_jwt_identity()
+        # Re-inyectar los roles actualizados en los claims del nuevo token
+        roles_data = SecurityService.get_user_roles(int(user_id))
+        roles_list = [r['name'] for r in roles_data]
+
+        new_access = create_access_token(
+            identity=str(user_id),
+            additional_claims={"roles": roles_list}
+        )
+        return jsonify({"access_token": new_access}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
