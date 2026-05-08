@@ -238,7 +238,7 @@ class AcademicRepository:
         
     @staticmethod
     def get_groups_by_user(user_id: int) -> list:
-        from app.core_academic.models import Group, Enrollment
+        from app.core_academic.models import Group, Enrollment, GroupObserver
         # 1. Traer los grupos donde es docente
         teacher_groups = Group.query.filter_by(teacher_id=user_id, is_active=True).all()
         
@@ -246,8 +246,16 @@ class AcademicRepository:
         enrollments = Enrollment.query.filter_by(student_id=user_id, is_active=True).all()
         student_groups = [e.group for e in enrollments if e.group and e.group.is_active]
         
-        # Combinar ambos (por si un usuario tiene rol mixto)
-        all_groups = list({g.id: g for g in (teacher_groups + student_groups)}.values())
+        # 3. Traer los grupos donde tiene permiso de observador (practicante)
+        observations = GroupObserver.query.filter_by(observer_id=user_id, is_active=True).all()
+        observer_groups = []
+        for obs in observations:
+            g = Group.query.get(obs.group_id)
+            if g and g.is_active:
+                observer_groups.append(g)
+        
+        # Combinar todos (por si un usuario tiene rol mixto)
+        all_groups = list({g.id: g for g in (teacher_groups + student_groups + observer_groups)}.values())
         return all_groups
 
     @staticmethod
