@@ -450,6 +450,7 @@ class AcademicService:
             return {
                 "attempt_id": attempt_id,
                 "exam_id": attempt.exam_id,
+                "ova_id": exam.ova_id if exam else None,
                 "student_id": attempt.student_id,
                 "score": 0,
                 "passed": False,
@@ -476,6 +477,7 @@ class AcademicService:
         return {
             "attempt_id": attempt_id,
             "exam_id": attempt.exam_id,
+            "ova_id": exam.ova_id if exam else None,
             "student_id": attempt.student_id,
             "score": score,
             "passed": passed,
@@ -560,7 +562,27 @@ class AcademicService:
     @staticmethod
     def get_ovas_by_topic(topic_id: int) -> list:
         ovas = AcademicRepository.get_ovas_by_topic(topic_id)
-        return [{"id": o.id, "title": o.title, "description": o.description, "order_index": o.order_index} for o in ovas]
+        result = []
+        for o in ovas:
+            res_list = []
+            for r in o.resources:
+                if r.is_active:
+                    res_list.append({
+                        "id": r.id,
+                        "resource_type": r.resource_type.value,
+                        "url": r.url,
+                        "content": r.content,
+                        "display_title": r.display_title,
+                        "order_index": r.order_index
+                    })
+            result.append({
+                "id": o.id,
+                "title": o.title,
+                "description": o.description,
+                "order_index": o.order_index,
+                "resources": res_list
+            })
+        return result
 
     @staticmethod
     def get_exam_by_ova_full(ova_id: int) -> dict:
