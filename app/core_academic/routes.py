@@ -2,13 +2,14 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from app.core_academic.services import AcademicService
+from app.utils.decorators import role_required
 
 academic_bp = Blueprint('academic', __name__, url_prefix='/api/v1/academic')
 
 
 # ── GRUPOS ────────────────────────────────────────────────────────────────────
 @academic_bp.route('/groups', methods=['POST'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def create_group():
     data = request.get_json()
     if not data or 'name' not in data or 'teacher_id' not in data:
@@ -30,7 +31,7 @@ def get_groups():
         return jsonify({"error": str(e)}), 500
 
 @academic_bp.route('/groups/<int:group_id>', methods=['PUT'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def update_group(group_id):
     data = request.get_json()
     if not data or 'name' not in data:
@@ -45,7 +46,7 @@ def update_group(group_id):
         return jsonify({"error": str(e)}), 500
 
 @academic_bp.route('/groups/<int:group_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def delete_group(group_id):
     try:
         return jsonify(AcademicService.soft_delete_group(group_id)), 200
@@ -55,7 +56,7 @@ def delete_group(group_id):
 
 # ── MATRÍCULAS ────────────────────────────────────────────────────────────────
 @academic_bp.route('/enrollments', methods=['POST'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def create_enrollment():
     data = request.get_json()
     if not data or 'student_id' not in data or 'group_id' not in data:
@@ -88,7 +89,7 @@ def get_enrollment(enrollment_id):
         return jsonify({"error": str(e)}), 404
 
 @academic_bp.route('/enrollments/<int:enrollment_id>', methods=['PUT'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def update_enrollment(enrollment_id):
     data = request.get_json()
     if not data or 'group_id' not in data:
@@ -101,7 +102,7 @@ def update_enrollment(enrollment_id):
         return jsonify({"error": str(e)}), 404
 
 @academic_bp.route('/enrollments/<int:enrollment_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def delete_enrollment(enrollment_id):
     try:
         return jsonify(AcademicService.soft_delete_enrollment(
@@ -112,7 +113,7 @@ def delete_enrollment(enrollment_id):
 
 # ── TEMAS ─────────────────────────────────────────────────────────────────────
 @academic_bp.route('/topics', methods=['POST'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def create_topic():
     data = request.get_json()
     if not data or 'group_id' not in data or 'title' not in data:
@@ -127,7 +128,7 @@ def create_topic():
         return jsonify({"error": str(e)}), 400
 
 @academic_bp.route('/topics/<int:topic_id>', methods=['PUT'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def update_topic(topic_id):
     data = request.get_json()
     if not data or 'title' not in data:
@@ -140,7 +141,7 @@ def update_topic(topic_id):
         return jsonify({"error": str(e)}), 404
 
 @academic_bp.route('/topics/<int:topic_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def delete_topic(topic_id):
     try:
         return jsonify(AcademicService.soft_delete_topic(topic_id)), 200
@@ -150,7 +151,7 @@ def delete_topic(topic_id):
 
 # ── OVAs ──────────────────────────────────────────────────────────────────────
 @academic_bp.route('/ovas', methods=['POST'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def create_ova():
     data = request.get_json()
     if not data or 'topic_id' not in data or 'title' not in data:
@@ -174,7 +175,7 @@ def get_ova(ova_id):
         return jsonify({"error": str(e)}), 404
 
 @academic_bp.route('/ovas/<int:ova_id>', methods=['PUT'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def update_ova(ova_id):
     data = request.get_json()
     if not data:
@@ -187,7 +188,7 @@ def update_ova(ova_id):
         return jsonify({"error": str(e)}), 404
 
 @academic_bp.route('/ovas/<int:ova_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def delete_ova(ova_id):
     try:
         return jsonify(AcademicService.soft_delete_ova(ova_id)), 200
@@ -197,7 +198,7 @@ def delete_ova(ova_id):
 
 # ── RECURSOS ──────────────────────────────────────────────────────────────────
 @academic_bp.route('/ovas/<int:ova_id>/resources', methods=['POST'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def create_resource(ova_id):
     data = request.get_json()
     if not data or 'resource_type' not in data or 'display_title' not in data:
@@ -215,7 +216,7 @@ def create_resource(ova_id):
         return jsonify({"error": str(e)}), 400
 
 @academic_bp.route('/resources/<int:resource_id>', methods=['PUT'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def update_resource(resource_id):
     data = request.get_json()
     if not data:
@@ -228,7 +229,7 @@ def update_resource(resource_id):
         return jsonify({"error": str(e)}), 404
 
 @academic_bp.route('/resources/<int:resource_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def delete_resource(resource_id):
     try:
         return jsonify(AcademicService.soft_delete_resource(resource_id)), 200
@@ -238,7 +239,7 @@ def delete_resource(resource_id):
 
 # ── EXÁMENES ──────────────────────────────────────────────────────────────────
 @academic_bp.route('/exams', methods=['POST'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def create_exam():
     data = request.get_json()
     if not data or 'ova_id' not in data or 'title' not in data:
@@ -254,7 +255,7 @@ def create_exam():
         return jsonify({"error": str(e)}), 400
 
 @academic_bp.route('/exams/<int:exam_id>', methods=['PUT'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def update_exam(exam_id):
     data = request.get_json()
     if not data:
@@ -267,7 +268,7 @@ def update_exam(exam_id):
         return jsonify({"error": str(e)}), 404
 
 @academic_bp.route('/exams/<int:exam_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def delete_exam(exam_id):
     try:
         return jsonify(AcademicService.soft_delete_exam(exam_id)), 200
@@ -277,7 +278,7 @@ def delete_exam(exam_id):
 
 # ── PREGUNTAS ─────────────────────────────────────────────────────────────────
 @academic_bp.route('/questions', methods=['POST'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def create_question():
     data = request.get_json()
     if not data or 'exam_id' not in data or 'statement' not in data:
@@ -293,7 +294,7 @@ def create_question():
         return jsonify({"error": str(e)}), 400
 
 @academic_bp.route('/questions/<int:question_id>', methods=['PUT'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def update_question(question_id):
     data = request.get_json()
     if not data:
@@ -306,7 +307,7 @@ def update_question(question_id):
         return jsonify({"error": str(e)}), 404
 
 @academic_bp.route('/questions/<int:question_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def delete_question(question_id):
     try:
         return jsonify(AcademicService.soft_delete_question(question_id)), 200
@@ -316,7 +317,7 @@ def delete_question(question_id):
 
 # ── OPCIONES ──────────────────────────────────────────────────────────────────
 @academic_bp.route('/options', methods=['POST'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def create_option():
     data = request.get_json()
     if not data or 'question_id' not in data or 'text' not in data:
@@ -331,7 +332,7 @@ def create_option():
         return jsonify({"error": str(e)}), 400
 
 @academic_bp.route('/options/<int:option_id>', methods=['PUT'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def update_option(option_id):
     data = request.get_json()
     if not data:
@@ -344,7 +345,7 @@ def update_option(option_id):
         return jsonify({"error": str(e)}), 404
 
 @academic_bp.route('/options/<int:option_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def delete_option(option_id):
     try:
         return jsonify(AcademicService.soft_delete_option(option_id)), 200
@@ -354,7 +355,7 @@ def delete_option(option_id):
 
 # ── CLAVE DE RESPUESTAS ───────────────────────────────────────────────────────
 @academic_bp.route('/answer-key', methods=['POST'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def set_answer_key():
     data = request.get_json()
     if not data or 'question_id' not in data or 'correct_option_id' not in data:
@@ -405,7 +406,7 @@ def get_attempt_result(attempt_id):
     
 # ── OBSERVADORES (PRACTICANTES) ───────────────────────────────────────────────
 @academic_bp.route('/groups/<int:group_id>/observers', methods=['POST'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def assign_observer(group_id):
     data = request.get_json()
     if not data or 'observer_id' not in data or 'assigned_by' not in data:
@@ -433,7 +434,7 @@ def get_observers(group_id):
         return jsonify({"error": str(e)}), 500
 
 @academic_bp.route('/observers/<int:observer_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('docente', 'administrador')
 def revoke_observer(observer_id):
     try:
         return jsonify(AcademicService.revoke_observer(observer_id)), 200
