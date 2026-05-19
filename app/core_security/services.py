@@ -7,7 +7,19 @@ from app.core_security.models import (
 )
 from app.core_security.repositories import SecurityRepository
 from werkzeug.security import generate_password_hash, check_password_hash
+import re
 
+def validate_document_id(document_id: str) -> str:
+    """Valida que el documento de identidad sea numérico y tenga longitud válida."""
+    cleaned = document_id.strip()
+    
+    if not cleaned:
+        raise ValueError("El documento de identidad es obligatorio.")
+    
+    if not re.match(r'^\d{5,15}$', cleaned):
+        raise ValueError("El documento debe contener solo números (entre 5 y 15 dígitos).")
+    
+    return cleaned
 
 class SecurityService:
 
@@ -17,6 +29,8 @@ class SecurityService:
                       username: str, password: str, role_name: str = "estudiante", **kwargs) -> dict:
         """Crea una Persona, un Usuario y le asigna un rol (por defecto 'estudiante').
         """
+        
+        document_id = validate_document_id(document_id)
 
         # ── Validaciones de unicidad ──────────────────────────────────────
         if SecurityRepository.get_person_by_document(document_id):

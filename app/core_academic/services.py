@@ -458,18 +458,42 @@ class AcademicService:
                 "total_questions": 0,
                 "passing_score": exam.passing_score if exam else 0,
                 "submitted_at": None,
-                "status": "in_progress"
+                "status": "in_progress",
+                "question_results": []
             }
         student_answers = AcademicRepository.get_answers_by_attempt(attempt_id)
         student_map = {a.question_id: a.selected_option_id
                        for a in student_answers}
         answer_keys = AcademicRepository.get_answer_keys_by_exam(attempt.exam_id)
         key_map = {k.question_id: k.correct_option_id for k in answer_keys}
+        
+        questions = AcademicRepository.get_questions_by_exam(attempt.exam_id)
         total_questions = len(key_map)
-        correct_count = sum(
-            1 for qid, correct_opt in key_map.items()
-            if student_map.get(qid) == correct_opt
-        )
+        correct_count = 0
+        question_results = []
+        
+        for q in questions:
+            qid = q.id
+            correct_opt = key_map.get(qid)
+            selected_opt = student_map.get(qid)
+            is_correct = (selected_opt == correct_opt) if correct_opt is not None else False
+            
+            if is_correct:
+                correct_count += 1
+                
+            options = AcademicRepository.get_options_by_question(qid)
+            opt_map = {o.id: o.text for o in options}
+            
+            question_results.append({
+                "question_id": qid,
+                "statement": q.statement,
+                "selected_option_id": selected_opt,
+                "selected_option_text": opt_map.get(selected_opt) if selected_opt else None,
+                "correct_option_id": correct_opt,
+                "correct_option_text": opt_map.get(correct_opt) if correct_opt else None,
+                "is_correct": is_correct
+            })
+            
         score = round(
             (correct_count / total_questions) * 100
         ) if total_questions > 0 else 0
@@ -485,7 +509,8 @@ class AcademicService:
             "total_questions": total_questions,
             "passing_score": exam.passing_score,
             "submitted_at": attempt.submitted_at.isoformat(),
-            "status": "completed"
+            "status": "completed",
+            "question_results": question_results
         }
         
 # ── OBSERVADORES (PRACTICANTES) ───────────────────────────────────────────
@@ -598,6 +623,33 @@ class AcademicService:
                 "statement": q.statement,
                 "points": q.points,
                 "order_index": q.order_index,
+                "options": [{"id": o.id, "text": o.text, "order_index": o.order_index} for o in options]
+            })
+        return {
+            "id": exam.id,
+            "title": exam.title,
+            "passing_score": exam.passing_score,
+            "max_attempts": exam.max_attempts,
+            "questions": qs_data
+        }
+
+    @staticmethod
+    def get_exam_by_ova_teacher(ova_id: int) -> dict:
+        """Versión exclusiva para docentes que incluye correct_option_id."""
+        exam = AcademicRepository.get_exam_by_ova(ova_id)
+        if not exam or not exam.is_active:
+            raise ValueError("Examen no encontrado o inactivo")
+        questions = AcademicRepository.get_questions_by_exam(exam.id)
+        qs_data = []
+        for q in questions:
+            options = AcademicRepository.get_options_by_question(q.id)
+            correct_option_id = q.answer_key.correct_option_id if q.answer_key else None
+            qs_data.append({
+                "id": q.id,
+                "statement": q.statement,
+                "points": q.points,
+                "order_index": q.order_index,
+                "correct_option_id": correct_option_id,
                 "options": [{"id": o.id, "text": o.text, "order_index": o.order_index} for o in options]
             })
         return {

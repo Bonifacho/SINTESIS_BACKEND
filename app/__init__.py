@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+from flask_cors import CORS
 from config import Config
 from app.extensions import db, migrate, jwt
 # Importar modelos para que Alembic los detecte
@@ -15,6 +16,10 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+
+    # ── CORS ──────────────────────────────────────────────────────────────
+    # Permite peticiones desde el portal web (Vite dev server u otro origen)
+    CORS(app, supports_credentials=True)
 
     # ── Error Handlers Globales ───────────────────────────────────────────
     # Garantizan que TODA respuesta de error sea JSON parseable

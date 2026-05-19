@@ -33,6 +33,8 @@ def register():
         return jsonify({"message": "Usuario registrado exitosamente",
                         "data": result}), 201
     except ValueError as e:
+        if "documento" in str(e).lower() or "solo números" in str(e).lower():
+            return jsonify({"error": str(e)}), 422
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -56,6 +58,8 @@ def admin_register():
         return jsonify({"message": "Usuario registrado exitosamente por administrador",
                         "data": result}), 201
     except ValueError as e:
+        if "documento" in str(e).lower() or "solo números" in str(e).lower():
+            return jsonify({"error": str(e)}), 422
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
