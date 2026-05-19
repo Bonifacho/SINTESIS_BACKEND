@@ -443,6 +443,16 @@ class AcademicService:
         return AcademicService._calculate_result(attempt_id)
 
     @staticmethod
+    def soft_delete_attempt(attempt_id: int) -> dict:
+        """Permite a un docente resetear (invalidar) un intento para liberar cupo al estudiante."""
+        attempt = AcademicRepository.get_attempt_by_id(attempt_id)
+        if not attempt or not attempt.is_active:
+            raise ValueError("Intento no encontrado o ya reseteado")
+        attempt.is_active = False
+        db.session.commit()
+        return {"message": f"Intento {attempt_id} reseteado exitosamente"}
+
+    @staticmethod
     def _calculate_result(attempt_id: int) -> dict:
         attempt = AcademicRepository.get_attempt_by_id(attempt_id)
         exam = AcademicRepository.get_exam_by_id(attempt.exam_id)

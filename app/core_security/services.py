@@ -69,6 +69,8 @@ class SecurityService:
         return {
             "id": user.id,
             "username": user.username,
+            "first_name": person.first_name,
+            "last_name": person.last_name,
             "full_name": f"{person.first_name} {person.last_name}",
             "role": role.name
         }
@@ -99,6 +101,8 @@ class SecurityService:
         return {
             "user_id": user.id,
             "username": user.username,
+            "first_name": person.first_name if person else "",
+            "last_name": person.last_name if person else "",
             "full_name": f"{person.first_name} {person.last_name}" if person else "",
             "email": (person.email or "") if person else "",
             "roles": role_names
@@ -115,6 +119,23 @@ class SecurityService:
         )
         SecurityRepository.add_token_to_blacklist(token)
         return {"message": "Sesión cerrada correctamente"}
+
+    @staticmethod
+    def forgot_password(identifier: str) -> dict:
+        """Simula el flujo de recuperación de contraseña."""
+        user = SecurityRepository.get_user_by_username(identifier)
+        if not user or not user.is_active:
+            # En producción, no revelamos si el usuario existe para evitar enumeración.
+            # Pero para este entorno de sustentación podemos arrojar un error descriptivo.
+            raise ValueError("Usuario no encontrado")
+            
+        import time
+        simulated_token = f"RESET-{user.id}-{int(time.time())}"
+        
+        return {
+            "message": "Instrucciones de recuperación enviadas",
+            "reset_token": simulated_token
+        }
 
     # ── ROLES ─────────────────────────────────────────────────────────────────
     @staticmethod

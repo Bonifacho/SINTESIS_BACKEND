@@ -97,6 +97,21 @@ def login():
         return jsonify({"error": str(e)}), 500
 
 
+# ── RECUPERACIÓN DE CONTRASEÑA ────────────────────────────────────────────────
+@security_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    data = request.get_json()
+    if not data or 'identifier' not in data:
+        return jsonify({"error": "Se requiere 'identifier' (username o correo)"}), 400
+    try:
+        result = SecurityService.forgot_password(data['identifier'])
+        return jsonify(result), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── REFRESH TOKEN ─────────────────────────────────────────────────────────
 @security_bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)

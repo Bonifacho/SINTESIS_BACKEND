@@ -402,6 +402,17 @@ def get_attempt_result(attempt_id):
             attempt_id)}), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
+
+@academic_bp.route('/attempts/<int:attempt_id>', methods=['DELETE'])
+@role_required('docente', 'administrador')
+def reset_attempt(attempt_id):
+    """Permite al docente invalidar un intento fallido del estudiante."""
+    try:
+        return jsonify(AcademicService.soft_delete_attempt(attempt_id)), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     
     
 # ── OBSERVADORES (PRACTICANTES) ───────────────────────────────────────────────
@@ -473,6 +484,17 @@ def get_topic_ovas(topic_id):
 def get_exam_by_ova_full(ova_id):
     try:
         result = AcademicService.get_exam_by_ova_full(ova_id)
+        return jsonify({"status": "success", "data": result}), 200
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 404
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@academic_bp.route('/exams/by-ova/<int:ova_id>/teacher', methods=['GET'])
+@role_required('docente', 'administrador')
+def get_exam_by_ova_teacher(ova_id):
+    try:
+        result = AcademicService.get_exam_by_ova_teacher(ova_id)
         return jsonify({"status": "success", "data": result}), 200
     except ValueError as e:
         return jsonify({"status": "error", "message": str(e)}), 404
