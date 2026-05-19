@@ -122,20 +122,68 @@ class SecurityService:
 
     @staticmethod
     def forgot_password(identifier: str) -> dict:
-        """Simula el flujo de recuperación de contraseña."""
+        """Genera un token real y lo almacena para recuperar la contraseña."""
         user = SecurityRepository.get_user_by_username(identifier)
         if not user or not user.is_active:
-            # En producción, no revelamos si el usuario existe para evitar enumeración.
-            # Pero para este entorno de sustentación podemos arrojar un error descriptivo.
             raise ValueError("Usuario no encontrado")
             
-        import time
-        simulated_token = f"RESET-{user.id}-{int(time.time())}"
+        import secrets
+        import hashlib
+        from datetime import timedelta
+        
+        # 1. Generar token criptográficamente seguro
+        raw_token = secrets.token_urlsafe(32)
+        
+        # 2. Hashearlo para guardar en DB (por si la DB se compromete, los tokens no son usables)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        
+        # 3. Guardar en BD
+        from app.core_security.models import PasswordResetToken
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        token_record = PasswordResetToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at)
+        SecurityRepository.create_password_reset_token(token_record)
+        
+        # 4. Simulación del envío de correo (preparado para integrar SMTP)
+        person = SecurityRepository.get_person_by_id(user.person_id)
+        email_dest = person.email if person and person.email else f"{user.username}@colegio.edu.co"
+        
+        # Para el portal web y la app, les devolvemos el raw_token en consola
+        # ya que no tenemos un servidor SMTP activo. 
+        # (En producción esto no se devuelve en la API)
         
         return {
-            "message": "Instrucciones de recuperación enviadas",
-            "reset_token": simulated_token
+            "message": f"Instrucciones de recuperación enviadas a {email_dest}",
+            "dev_token": raw_token  # Exclusivo para QA/Sustentación
         }
+
+    @staticmethod
+    def reset_password(raw_token: str, new_password: str) -> dict:
+        import hashlib
+        
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        token_record = SecurityRepository.get_password_reset_token(token_hash)
+        
+        if not token_record:
+            raise ValueError("El token de recuperación es inválido.")
+            
+        if token_record.is_used:
+            raise ValueError("Este token ya fue utilizado.")
+            
+        if token_record.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+            raise ValueError("El token ha expirado.")
+            
+        user = SecurityRepository.get_user_by_id(token_record.user_id)
+        if not user or not user.is_active:
+            raise ValueError("El usuario asociado al token no es válido.")
+            
+        # Actualizar contraseña y marcar token
+        user.password_hash = generate_password_hash(new_password)
+        token_record.is_used = True
+        
+        from app.extensions import db
+        db.session.commit()
+        
+        return {"message": "La contraseña ha sido actualizada exitosamente."}
 
     # ── ROLES ─────────────────────────────────────────────────────────────────
     @staticmethod

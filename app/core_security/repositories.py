@@ -2,7 +2,8 @@
 from app.extensions import db
 from app.core_security.models import (
     Person, User, Role, Permission,
-    UserHasRole, RoleHasPermission, BlacklistedToken
+    UserHasRole, RoleHasPermission, BlacklistedToken,
+    PasswordResetToken
 )
 
 
@@ -133,3 +134,14 @@ class SecurityRepository:
         """Verifica si un JTI ya fue revocado. Se llama en cada request."""
         return db.session.query(BlacklistedToken).filter_by(
             jti=jti).first() is not None
+
+    # ── TOKENS DE RECUPERACIÓN DE CONTRASEÑA ──────────────────────────────────
+    @staticmethod
+    def create_password_reset_token(token: 'PasswordResetToken') -> 'PasswordResetToken':
+        db.session.add(token)
+        db.session.commit()
+        return token
+
+    @staticmethod
+    def get_password_reset_token(token_hash: str) -> 'PasswordResetToken':
+        return db.session.query(PasswordResetToken).filter_by(token_hash=token_hash).first()

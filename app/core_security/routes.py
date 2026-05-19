@@ -111,6 +111,19 @@ def forgot_password():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@security_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    data = request.get_json()
+    if not data or 'token' not in data or 'new_password' not in data:
+        return jsonify({"error": "Se requiere 'token' y 'new_password'"}), 400
+    try:
+        result = SecurityService.reset_password(data['token'], data['new_password'])
+        return jsonify(result), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # ── REFRESH TOKEN ─────────────────────────────────────────────────────────
 @security_bp.route('/refresh', methods=['POST'])
