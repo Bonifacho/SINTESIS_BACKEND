@@ -24,7 +24,7 @@ UNIVERSAL_PROYECT_SINTESIS_CONTEXT.md
 AGENTES.md 
 scripts/seed_users.py
 scripts/fix_estudiante1.py
-
+scripts/create_admin_prod.py
 
 
 # archivo de guion para el video temporal
