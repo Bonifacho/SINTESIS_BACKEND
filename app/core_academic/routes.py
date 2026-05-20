@@ -30,6 +30,17 @@ def get_groups():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@academic_bp.route('/groups/<int:group_id>', methods=['GET'])
+@role_required('docente', 'administrador', 'estudiante', 'practicante')
+def get_group(group_id):
+    try:
+        group_data = AcademicService.get_group(group_id)
+        return jsonify(group_data), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @academic_bp.route('/groups/<int:group_id>', methods=['PUT'])
 @role_required('docente', 'administrador')
 def update_group(group_id):
