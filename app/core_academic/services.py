@@ -33,6 +33,18 @@ class AcademicService:
                  "is_active": g.is_active} for g in groups]
 
     @staticmethod
+    def get_group(group_id: int) -> dict:
+        group = AcademicRepository.get_group_by_id(group_id)
+        if not group or not group.is_active:
+            raise ValueError("Grupo no encontrado o inactivo")
+        return {
+            "id": group.id,
+            "name": group.name,
+            "teacher_id": group.teacher_id,
+            "is_active": group.is_active
+        }
+
+    @staticmethod
     def update_group(group_id: int, new_name: str) -> dict:
         group = AcademicRepository.get_group_by_id(group_id)
         if not group or not group.is_active:
