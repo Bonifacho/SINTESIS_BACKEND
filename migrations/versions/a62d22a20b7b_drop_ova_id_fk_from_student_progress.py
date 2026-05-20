@@ -17,7 +17,10 @@ depends_on = None
 
 
 def upgrade():
-    op.drop_constraint('student_progress_ibfk_1', 'student_progress', type_='foreignkey')
+    try:
+        op.drop_constraint('student_progress_ibfk_1', 'student_progress', type_='foreignkey')
+    except Exception:
+        pass  # FK may not exist on TiDB Cloud or fresh databases
 
 
 def downgrade():
