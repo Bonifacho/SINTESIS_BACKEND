@@ -548,4 +548,16 @@ def register_progress():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
+
+
+@academic_bp.route('/groups/<int:group_id>/activity', methods=['GET'])
+@role_required('docente', 'administrador', 'practicante')
+def get_group_activity(group_id):
+    """Historial de tracking silencioso del grupo. Solo para docente/practicante/admin."""
+    try:
+        result = AcademicService.get_group_activity(group_id)
+        return jsonify({"data": result}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+

@@ -105,6 +105,7 @@ class SecurityService:
             "last_name": person.last_name if person else "",
             "full_name": f"{person.first_name} {person.last_name}" if person else "",
             "email": (person.email or "") if person else "",
+            "document_id": person.document_id if person else "",
             "roles": role_names
         }
 

@@ -520,10 +520,16 @@ class AcademicService:
             (correct_count / total_questions) * 100
         ) if total_questions > 0 else 0
         passed = score >= exam.passing_score
+        # Obtener título del OVA para filtrado en historial
+        ova_title = None
+        if exam and exam.ova_id:
+            ova = AcademicRepository.get_ova_by_id(exam.ova_id)
+            ova_title = ova.title if ova else None
         return {
             "attempt_id": attempt_id,
             "exam_id": attempt.exam_id,
             "ova_id": exam.ova_id if exam else None,
+            "ova_title": ova_title,
             "student_id": attempt.student_id,
             "score": score,
             "passed": passed,
@@ -686,6 +692,38 @@ class AcademicService:
     def get_attempts_by_student(student_id: int) -> list:
         attempts = AcademicRepository.get_attempts_by_student(student_id)
         return [AcademicService._calculate_result(a.id) for a in attempts]
+
+    @staticmethod
+    def get_group_activity(group_id: int) -> list:
+        """Retorna el historial de tracking silencioso de un grupo."""
+        from app.core_academic.models import StudentProgress
+        from app.core_security.repositories import SecurityRepository
+        
+        # Traer todos los enrollments activos del grupo
+        enrollments = AcademicRepository.get_enrollments_by_group(group_id)
+        student_ids = [e.student_id for e in enrollments]
+        if not student_ids:
+            return []
+            
+        records = StudentProgress.query.filter(
+            StudentProgress.user_id.in_(student_ids)
+        ).order_by(StudentProgress.created_at.desc()).all()
+        
+        result = []
+        for r in records:
+            ova = AcademicRepository.get_ova_by_id(r.ova_id)
+            user = SecurityRepository.get_user_by_id(r.user_id)
+            person = SecurityRepository.get_person_by_id(user.person_id) if user else None
+            
+            result.append({
+                "user_id": r.user_id,
+                "student_name": f"{person.first_name} {person.last_name}" if person else "Desconocido",
+                "ova_id": r.ova_id,
+                "ova_title": ova.title if ova else "OVA eliminada",
+                "action": r.action,
+                "timestamp": r.created_at.isoformat() if r.created_at else None
+            })
+        return result
 
     @staticmethod
     def get_attempts_by_group(group_id: int) -> list:
