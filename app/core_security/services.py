@@ -106,7 +106,8 @@ class SecurityService:
             "full_name": f"{person.first_name} {person.last_name}" if person else "",
             "email": (person.email or "") if person else "",
             "document_id": person.document_id if person else "",
-            "roles": role_names
+            "roles": role_names,
+            "created_at": person.created_at.isoformat() if person and hasattr(person, 'created_at') and person.created_at else None
         }
 
     # ── LOGOUT ────────────────────────────────────────────────────────────────
