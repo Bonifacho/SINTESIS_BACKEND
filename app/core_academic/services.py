@@ -83,14 +83,33 @@ class AcademicService:
 
     @staticmethod
     def get_enrollments_by_group(group_id: int) -> list:
+        from app.core_security.repositories import SecurityRepository
         group = AcademicRepository.get_group_by_id(group_id)
         if not group or not group.is_active:
             raise ValueError("Grupo no encontrado o inactivo")
         enrollments = AcademicRepository.get_enrollments_by_group(group_id)
-        return [{"id": e.id, "student_id": e.student_id,
-                 "group_id": e.group_id,
-                 "enrolled_at": e.enrolled_at.isoformat(),
-                 "is_active": e.is_active} for e in enrollments]
+        
+        result = []
+        for e in enrollments:
+            user = SecurityRepository.get_user_by_id(e.student_id)
+            if user:
+                person = SecurityRepository.get_person_by_id(user.person_id)
+                full_name = f"{person.first_name} {person.last_name}" if person else ""
+                username = user.username
+            else:
+                full_name = "Usuario Eliminado"
+                username = "eliminado"
+
+            result.append({
+                "id": e.id,
+                "student_id": e.student_id,
+                "full_name": full_name,
+                "username": username,
+                "group_id": e.group_id,
+                "enrolled_at": e.enrolled_at.isoformat(),
+                "is_active": e.is_active
+            })
+        return result
 
     @staticmethod
     def get_enrollment_by_id(enrollment_id: int) -> dict:
