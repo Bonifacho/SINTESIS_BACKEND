@@ -542,7 +542,9 @@ def register_progress():
         result = AcademicService.register_progress(
             user_id=data['user_id'],
             ova_id=data['ova_id'],
-            action=data['action'])
+            action=data['action'],
+            topic_name=data.get('topic_name'),
+            resource_name=data.get('resource_name'))
         return jsonify({"message": "Progreso registrado",
                         "data": {"id": result["id"]}}), 201
     except ValueError as e:

@@ -252,5 +252,7 @@ class StudentProgress(db.Model):
     user_id    = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     ova_id     = db.Column(db.Integer, db.ForeignKey('academic_ovas.id'), nullable=False)
     action     = db.Column(db.String(50), nullable=False)
+    topic_name = db.Column(db.String(150), nullable=True)
+    resource_name = db.Column(db.String(150), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True),
                            default=lambda: datetime.now(timezone.utc))
