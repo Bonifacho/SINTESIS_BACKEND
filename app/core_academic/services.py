@@ -647,12 +647,20 @@ class AcademicService:
                         "display_title": r.display_title,
                         "order_index": r.order_index
                     })
+            
+            # Verificar si tiene examen
+            exam = AcademicRepository.get_exam_by_ova(o.id)
+            has_exam = exam is not None and exam.is_active
+
             result.append({
                 "id": o.id,
                 "title": o.title,
                 "description": o.description,
                 "order_index": o.order_index,
-                "resources": res_list
+                "resources": res_list,
+                "has_exam": has_exam,
+                "exam_id": exam.id if has_exam else None,
+                "exam_title": exam.title if has_exam else None
             })
         return result
 
@@ -715,22 +723,27 @@ class AcademicService:
     @staticmethod
     def get_group_activity(group_id: int) -> list:
         """Retorna el historial de tracking silencioso de un grupo."""
-        from app.core_academic.models import StudentProgress
+        from app.core_academic.models import StudentProgress, OVA, Topic
         from app.core_security.repositories import SecurityRepository
+        from app.extensions import db
         
-        # Traer todos los enrollments activos del grupo
         enrollments = AcademicRepository.get_enrollments_by_group(group_id)
         student_ids = [e.student_id for e in enrollments]
         if not student_ids:
             return []
             
-        records = StudentProgress.query.filter(
+        # JOIN estricto: filtrado por group_id Y solo para estudiantes del grupo
+        records = db.session.query(StudentProgress, OVA).join(
+            OVA, StudentProgress.ova_id == OVA.id
+        ).join(
+            Topic, OVA.topic_id == Topic.id
+        ).filter(
+            Topic.group_id == group_id,
             StudentProgress.user_id.in_(student_ids)
         ).order_by(StudentProgress.created_at.desc()).all()
         
         result = []
-        for r in records:
-            ova = AcademicRepository.get_ova_by_id(r.ova_id)
+        for r, ova in records:
             user = SecurityRepository.get_user_by_id(r.user_id)
             person = SecurityRepository.get_person_by_id(user.person_id) if user else None
             
@@ -739,6 +752,8 @@ class AcademicService:
                 "student_name": f"{person.first_name} {person.last_name}" if person else "Desconocido",
                 "ova_id": r.ova_id,
                 "ova_title": ova.title if ova else "OVA eliminada",
+                "topic_name": r.topic_name,
+                "resource_name": r.resource_name,
                 "action": r.action,
                 "timestamp": r.created_at.isoformat() if r.created_at else None
             })
@@ -753,19 +768,22 @@ class AcademicService:
     VALID_ACTIONS = {"exam_started", "exam_opened", "resource_opened"}
 
     @staticmethod
-    def register_progress(user_id: int, ova_id: int, action: str) -> dict:
+    def register_progress(user_id: int, ova_id: int, action: str, topic_name: str = None, resource_name: str = None) -> dict:
         """Registra un evento de acceso silencioso del estudiante."""
         if action not in AcademicService.VALID_ACTIONS:
             raise ValueError(
                 f"Acción inválida '{action}'. "
                 f"Valores permitidos: {AcademicService.VALID_ACTIONS}")
         progress = StudentProgress(
-            user_id=user_id, ova_id=ova_id, action=action)
+            user_id=user_id, ova_id=ova_id, action=action,
+            topic_name=topic_name, resource_name=resource_name)
         created = AcademicRepository.create_progress(progress)
         return {
             "id": created.id,
             "user_id": created.user_id,
             "ova_id": created.ova_id,
             "action": created.action,
-            "created_at": created.created_at.isoformat()
+            "topic_name": created.topic_name,
+            "resource_name": created.resource_name,
+            "created_at": created.created_at.isoformat() if created.created_at else None
         }

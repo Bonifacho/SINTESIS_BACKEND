@@ -5,7 +5,7 @@ from app.core_academic.models import (
     OVA, OVAResource,
     Exam, Question, Option, AnswerKey,
     ExamAttempt, AttemptAnswer,
-    GroupObserver
+    GroupObserver, StudentProgress
 )
 
 
@@ -195,7 +195,15 @@ class AcademicRepository:
         return (
             db.session.query(ExamAttempt)
             .join(Enrollment, ExamAttempt.student_id == Enrollment.student_id)
-            .filter(Enrollment.group_id == group_id, Enrollment.is_active == True, ExamAttempt.is_active == True)
+            .join(Exam, ExamAttempt.exam_id == Exam.id)
+            .join(OVA, Exam.ova_id == OVA.id)
+            .join(Topic, OVA.topic_id == Topic.id)
+            .filter(
+                Enrollment.group_id == group_id,
+                Topic.group_id == group_id,
+                Enrollment.is_active == True,
+                ExamAttempt.is_active == True
+            )
             .all()
         )
 
