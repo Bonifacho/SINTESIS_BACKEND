@@ -269,7 +269,7 @@ class AcademicRepository:
         observations = GroupObserver.query.filter_by(observer_id=user_id, is_active=True).all()
         observer_groups = []
         for obs in observations:
-            g = Group.query.get(obs.group_id)
+            g = db.session.get(Group, obs.group_id)
             if g and g.is_active:
                 observer_groups.append(g)
         

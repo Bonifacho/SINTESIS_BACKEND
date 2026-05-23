@@ -11,6 +11,13 @@ class Config:
     # ¡AQUÍ ESTÁ EL CAMBIO CLAVE! Volvemos a DATABASE_URL
     SQLALCHEMY_DATABASE_URI      = os.getenv('DATABASE_URL') 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # ── Evita el error 500 (Lost connection to MySQL server / TiDB) ──
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    }
+    
     JWT_SECRET_KEY               = os.getenv('JWT_SECRET_KEY', 'super-llave-secreta-sintesis-2026')
     JWT_ACCESS_TOKEN_EXPIRES     = timedelta(minutes=15)
     JWT_REFRESH_TOKEN_EXPIRES    = timedelta(days=7)
