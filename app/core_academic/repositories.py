@@ -192,17 +192,28 @@ class AcademicRepository:
 
     @staticmethod
     def get_attempts_by_group(group_id: int):
+        # 1. Obtener todos los IDs de examen permitidos para este grupo
+        topics = db.session.query(Topic.id).filter_by(group_id=group_id, is_active=True).all()
+        topic_ids = [t.id for t in topics]
+        
+        ovas = db.session.query(OVA.id).filter(OVA.topic_id.in_(topic_ids), OVA.is_active == True).all()
+        ova_ids = [o.id for o in ovas]
+        
+        exams = db.session.query(Exam.id).filter(Exam.ova_id.in_(ova_ids), Exam.is_active == True).all()
+        exam_ids = [e.id for e in exams]
+
+        # 2. Filtrar intentos cruzando con las matrículas activas del estudiante
+        if not exam_ids:
+            return []
+
         return (
             db.session.query(ExamAttempt)
             .join(Enrollment, ExamAttempt.student_id == Enrollment.student_id)
-            .join(Exam, ExamAttempt.exam_id == Exam.id)
-            .join(OVA, Exam.ova_id == OVA.id)
-            .join(Topic, OVA.topic_id == Topic.id)
             .filter(
                 Enrollment.group_id == group_id,
-                Topic.group_id == group_id,
                 Enrollment.is_active == True,
-                ExamAttempt.is_active == True
+                ExamAttempt.is_active == True,
+                ExamAttempt.exam_id.in_(exam_ids)
             )
             .all()
         )
