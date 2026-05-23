@@ -25,6 +25,9 @@ AGENTES.md
 scripts/seed_users.py
 scripts/fix_estudiante1.py
 scripts/create_admin_prod.py
+scripts/seed_academic_data.py
+scripts/add_progress_cols.py 
+scripts/update_resources_urls.py
 
 
 # archivo de guion para el video temporal

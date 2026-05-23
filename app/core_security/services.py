@@ -379,6 +379,17 @@ class SecurityService:
             if 'last_name' in data: person.last_name = data['last_name']
             if 'document_id' in data: person.document_id = data['document_id']
             
-        from app.extensions import db
+        if 'role_name' in data:
+            role = SecurityRepository.get_role_by_name(data['role_name'])
+            if not role or not role.is_active:
+                raise ValueError(f"El rol '{data['role_name']}' no existe o está inactivo.")
+            
+            # Remove existing role assignments
+            UserHasRole.query.filter_by(user_id=user_id).delete()
+            
+            # Insert the new role assignment
+            new_role = UserHasRole(user_id=user_id, role_id=role.id)
+            db.session.add(new_role)
+            
         db.session.commit()
         return {"message": "Perfil actualizado exitosamente"}
