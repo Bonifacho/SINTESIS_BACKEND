@@ -20,6 +20,9 @@ class Person(db.Model):
     user = db.relationship('User', backref='person', uselist=False,
                            cascade="all, delete-orphan")
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # USUARIOS — credenciales de acceso
@@ -41,6 +44,9 @@ class User(db.Model):
     tokens = db.relationship('BlacklistedToken', backref='user',
                              lazy='dynamic', cascade="all, delete-orphan")
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ROLES — perfiles de acceso del sistema
@@ -60,6 +66,9 @@ class Role(db.Model):
     permissions = db.relationship('RoleHasPermission', backref='role',
                                   lazy='dynamic', cascade="all, delete-orphan")
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PERMISOS — acciones granulares del sistema
@@ -75,6 +84,9 @@ class Permission(db.Model):
 
     roles = db.relationship('RoleHasPermission', backref='permission',
                             lazy='dynamic', cascade="all, delete-orphan")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -92,6 +104,9 @@ class UserHasRole(db.Model):
     __table_args__ = (
         db.UniqueConstraint('user_id', 'role_id', name='uq_user_role'),
     )
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -111,6 +126,9 @@ class RoleHasPermission(db.Model):
         db.UniqueConstraint('role_id', 'permission_id', name='uq_role_permission'),
     )
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TOKENS EN LISTA NEGRA — logout seguro (Tríada CIA — Confidencialidad)
@@ -127,6 +145,9 @@ class BlacklistedToken(db.Model):
                                 default=lambda: datetime.now(timezone.utc))
     expires_at      = db.Column(db.DateTime, nullable=False)
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RECUPERACIÓN DE CONTRASEÑA — Almacena tokens seguros de reset
@@ -142,3 +163,6 @@ class PasswordResetToken(db.Model):
     is_used    = db.Column(db.Boolean, default=False, nullable=False)
 
     user = db.relationship('User', backref=db.backref('reset_tokens', cascade="all, delete-orphan", lazy='dynamic'))
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)

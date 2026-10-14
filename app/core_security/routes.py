@@ -176,7 +176,7 @@ def get_users():
         return jsonify({"error": str(e)}), 500
 
 @security_bp.route('/users/<int:user_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('administrador')
 def delete_user(user_id):
     try:
         return jsonify(SecurityService.soft_delete_user(user_id)), 200
@@ -186,7 +186,7 @@ def delete_user(user_id):
         return jsonify({"error": str(e)}), 500
 
 @security_bp.route('/users/<int:user_id>/roles', methods=['GET'])
-@jwt_required()
+@role_required('administrador')
 def get_user_roles(user_id):
     try:
         return jsonify({"data": SecurityService.get_user_roles(user_id)}), 200
@@ -194,7 +194,7 @@ def get_user_roles(user_id):
         return jsonify({"error": str(e)}), 404
 
 @security_bp.route('/users/<int:user_id>/roles', methods=['POST'])
-@jwt_required()
+@role_required('administrador')
 def assign_role_to_user(user_id):
     data = request.get_json()
     if not data or 'role_id' not in data:
@@ -207,7 +207,7 @@ def assign_role_to_user(user_id):
 
 @security_bp.route('/users/<int:user_id>/roles/<int:role_id>',
                    methods=['DELETE'])
-@jwt_required()
+@role_required('administrador')
 def revoke_role_from_user(user_id, role_id):
     try:
         return jsonify(SecurityService.revoke_role_from_user(
@@ -218,7 +218,7 @@ def revoke_role_from_user(user_id, role_id):
 
 # ── ROLES ─────────────────────────────────────────────────────────────────────
 @security_bp.route('/roles', methods=['POST'])
-@jwt_required()
+@role_required('administrador')
 def create_role():
     data = request.get_json()
     if not data or 'name' not in data:
@@ -232,7 +232,7 @@ def create_role():
         return jsonify({"error": str(e)}), 400
 
 @security_bp.route('/roles', methods=['GET'])
-@jwt_required()
+@role_required('administrador')
 def get_roles():
     try:
         return jsonify({"data": SecurityService.get_all_roles()}), 200
@@ -240,7 +240,7 @@ def get_roles():
         return jsonify({"error": str(e)}), 500
 
 @security_bp.route('/roles/<int:role_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('administrador')
 def delete_role(role_id):
     try:
         return jsonify(SecurityService.soft_delete_role(role_id)), 200
@@ -248,7 +248,7 @@ def delete_role(role_id):
         return jsonify({"error": str(e)}), 404
 
 @security_bp.route('/roles/<int:role_id>/permissions', methods=['GET'])
-@jwt_required()
+@role_required('administrador')
 def get_role_permissions(role_id):
     try:
         return jsonify({"data": SecurityService.get_role_permissions(
@@ -257,7 +257,7 @@ def get_role_permissions(role_id):
         return jsonify({"error": str(e)}), 404
 
 @security_bp.route('/roles/<int:role_id>/permissions', methods=['POST'])
-@jwt_required()
+@role_required('administrador')
 def assign_permission_to_role(role_id):
     data = request.get_json()
     if not data or 'permission_id' not in data:
@@ -270,7 +270,7 @@ def assign_permission_to_role(role_id):
 
 @security_bp.route('/roles/<int:role_id>/permissions/<int:permission_id>',
                    methods=['DELETE'])
-@jwt_required()
+@role_required('administrador')
 def revoke_permission_from_role(role_id, permission_id):
     try:
         return jsonify(SecurityService.revoke_permission_from_role(
@@ -281,7 +281,7 @@ def revoke_permission_from_role(role_id, permission_id):
 
 # ── PERMISOS ──────────────────────────────────────────────────────────────────
 @security_bp.route('/permissions', methods=['POST'])
-@jwt_required()
+@role_required('administrador')
 def create_permission():
     data = request.get_json()
     if not data or 'name' not in data:
@@ -295,7 +295,7 @@ def create_permission():
         return jsonify({"error": str(e)}), 400
 
 @security_bp.route('/permissions', methods=['GET'])
-@jwt_required()
+@role_required('administrador')
 def get_permissions():
     try:
         return jsonify({"data": SecurityService.get_all_permissions()}), 200
@@ -303,7 +303,7 @@ def get_permissions():
         return jsonify({"error": str(e)}), 500
 
 @security_bp.route('/permissions/<int:permission_id>', methods=['DELETE'])
-@jwt_required()
+@role_required('administrador')
 def delete_permission(permission_id):
     try:
         return jsonify(SecurityService.soft_delete_permission(
@@ -313,13 +313,27 @@ def delete_permission(permission_id):
     
     
 @security_bp.route('/users/<int:user_id>', methods=['PUT'])
-@jwt_required()
+@role_required('administrador')
 def update_user_profile(user_id):
-    data = request.get_json()
+    data = request.get_json() or {}
     try:
         result = SecurityService.update_user_profile(user_id, data)
         return jsonify({"status": "success", "data": result}), 200
     except ValueError as e:
-        return jsonify({"status": "error", "message": str(e)}), 404
+        return jsonify({"status": "error", "message": str(e)}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": "Error interno del servidor"}), 500
+
+
+@security_bp.route('/me', methods=['PUT'])
+@jwt_required()
+def update_own_profile():
+    user_id = int(get_jwt_identity())
+    data = request.get_json() or {}
+    try:
+        result = SecurityService.update_own_profile(user_id, data)
+        return jsonify({"status": "success", "data": result}), 200
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
     except Exception as e:
         return jsonify({"status": "error", "message": "Error interno del servidor"}), 500

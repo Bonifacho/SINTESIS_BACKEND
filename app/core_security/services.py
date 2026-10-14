@@ -375,11 +375,20 @@ class SecurityService:
         
         person = SecurityRepository.get_person_by_id(user.person_id)
         if person:
-            if 'first_name' in data: person.first_name = data['first_name']
-            if 'last_name' in data: person.last_name = data['last_name']
-            if 'document_id' in data: person.document_id = data['document_id']
+            if 'first_name' in data and data['first_name']:
+                person.first_name = data['first_name'].strip()
+            if 'last_name' in data and data['last_name']:
+                person.last_name = data['last_name'].strip()
+            if 'document_id' in data and data['document_id']:
+                validated_doc = validate_document_id(data['document_id'])
+                existing = SecurityRepository.get_person_by_document(validated_doc)
+                if existing and existing.id != person.id:
+                    raise ValueError("Ya existe una persona registrada con ese documento de identidad")
+                person.document_id = validated_doc
+            if 'email' in data and data['email']:
+                person.email = data['email'].strip()
             
-        if 'role_name' in data:
+        if 'role_name' in data and data['role_name']:
             role = SecurityRepository.get_role_by_name(data['role_name'])
             if not role or not role.is_active:
                 raise ValueError(f"El rol '{data['role_name']}' no existe o está inactivo.")
@@ -392,4 +401,25 @@ class SecurityService:
             db.session.add(new_role)
             
         db.session.commit()
-        return {"message": "Perfil actualizado exitosamente"}
+        return {"message": "Perfil de usuario actualizado exitosamente"}
+
+    @staticmethod
+    def update_own_profile(user_id: int, data: dict) -> dict:
+        """Permite a cualquier usuario autenticado actualizar únicamente sus propios datos personales."""
+        user = SecurityRepository.get_user_by_id(user_id)
+        if not user or not user.is_active:
+            raise ValueError("Usuario no encontrado o inactivo")
+        
+        person = SecurityRepository.get_person_by_id(user.person_id)
+        if not person:
+            raise ValueError("Datos de persona no encontrados para este usuario")
+        
+        if 'first_name' in data and data['first_name']:
+            person.first_name = data['first_name'].strip()
+        if 'last_name' in data and data['last_name']:
+            person.last_name = data['last_name'].strip()
+        if 'email' in data and data['email']:
+            person.email = data['email'].strip()
+            
+        db.session.commit()
+        return {"message": "Datos personales actualizados exitosamente"}
