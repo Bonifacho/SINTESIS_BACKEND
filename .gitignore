@@ -21,17 +21,9 @@ instance/
 
 # Archivo de contexto para agentes
 UNIVERSAL_PROYECT_SINTESIS_CONTEXT.md
-AGENTES.md 
-scripts/seed_users.py
-scripts/fix_estudiante1.py
-scripts/create_admin_prod.py
-scripts/seed_academic_data.py
-scripts/seed_large_academic_data.py
-scripts/seed_*.py
-scripts/add_progress_cols.py 
-scripts/update_resources_urls.py
-scripts/test_*.py
-scripts/enroll_*.py
+AGENTES.md
+scripts/*.py
+
 
 
 

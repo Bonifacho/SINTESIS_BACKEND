@@ -178,18 +178,25 @@ class AnswerKey(db.Model):
 
 class ExamAttempt(db.Model):
     """
-    Metadatos de un intento de examen. Registra quién, cuándo empezó
-    y cuándo envió. NO almacena score ni passed — esos valores se
-    calculan al vuelo en el backend cuando el frontend los solicita.
+    Metadatos y snapshot inmutable de un intento de examen (BE-03).
+    Registra quién, cuándo empezó, cuándo envió, y congela de manera
+    permanente la calificación (score, passed, total_questions, total_points, earned_points)
+    al momento del envío, previniendo que modificaciones posteriores a las preguntas,
+    ponderaciones o claves de respuesta alteren las notas históricas.
     """
     __tablename__ = 'exam_attempts'
 
-    id           = db.Column(db.Integer, primary_key=True)
-    exam_id      = db.Column(db.Integer, db.ForeignKey('exam_exams.id'), nullable=False)
-    student_id   = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    started_at   = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    submitted_at = db.Column(db.DateTime, nullable=True)   # None = intento en curso
-    is_active    = db.Column(db.Boolean, default=True, nullable=False)
+    id              = db.Column(db.Integer, primary_key=True)
+    exam_id         = db.Column(db.Integer, db.ForeignKey('exam_exams.id'), nullable=False)
+    student_id      = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    started_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    submitted_at    = db.Column(db.DateTime, nullable=True)   # None = intento en curso
+    score           = db.Column(db.Integer, nullable=True)   # Snapshot porcentual (0-100)
+    passed          = db.Column(db.Boolean, nullable=True)   # Snapshot aprobado/reprobado
+    total_questions = db.Column(db.Integer, nullable=True)   # Snapshot cant. preguntas
+    total_points    = db.Column(db.Integer, nullable=True)   # Snapshot suma puntos posibles
+    earned_points   = db.Column(db.Integer, nullable=True)   # Snapshot suma puntos logrados
+    is_active       = db.Column(db.Boolean, default=True, nullable=False)
 
     # Relaciones
     answers = db.relationship('AttemptAnswer', backref='attempt', lazy='dynamic', cascade="all, delete-orphan")

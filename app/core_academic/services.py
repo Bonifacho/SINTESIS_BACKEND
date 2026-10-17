@@ -140,8 +140,21 @@ class AcademicService:
 
     @staticmethod
     def get_all_groups() -> list:
+        from app.core_security.models import User, Person
         groups = AcademicRepository.get_all_groups()
+        # Resolver nombre del docente titular en una sola consulta (vista admin)
+        teacher_ids = {g.teacher_id for g in groups if g.teacher_id}
+        teacher_names = {}
+        if teacher_ids:
+            rows = (
+                db.session.query(User.id, Person.first_name, Person.last_name)
+                .join(Person, User.person_id == Person.id)
+                .filter(User.id.in_(teacher_ids))
+                .all()
+            )
+            teacher_names = {r.id: f"{r.first_name} {r.last_name}".strip() for r in rows}
         return [{"id": g.id, "name": g.name, "teacher_id": g.teacher_id,
+                 "teacher_name": teacher_names.get(g.teacher_id),
                  "is_active": g.is_active} for g in groups]
 
     @staticmethod
@@ -587,7 +600,7 @@ class AcademicService:
                 "question_id": question_id,
                 "correct_option_id": correct_option_id}
 
-    # ── INTENTOS Y CALIFICACIÓN AL VUELO ──────────────────────────────────────
+    # ── INTENTOS Y CALIFICACIÓN INMUTABLE ─────────────────────────────────────
     @staticmethod
     def start_attempt(student_id: int, exam_id: int) -> dict:
         exam = AcademicRepository.get_exam_by_id(exam_id)
@@ -598,6 +611,18 @@ class AcademicService:
         enrollment = AcademicRepository.get_enrollment_by_student_and_group(student_id, group_id)
         if not enrollment or not enrollment.is_active:
             raise PermissionError("El estudiante no está matriculado en el grupo de este examen")
+        
+        # Validar completitud del examen antes de permitir iniciar el intento (BE-02)
+        questions = AcademicRepository.get_questions_by_exam(exam_id)
+        if not questions:
+            raise ValueError("El examen no tiene preguntas configuradas.")
+        
+        answer_keys = AcademicRepository.get_answer_keys_by_exam(exam_id)
+        key_map = {k.question_id: k.correct_option_id for k in answer_keys if k.is_active}
+        missing_keys = [q.id for q in questions if q.id not in key_map or key_map[q.id] is None]
+        if missing_keys:
+            raise ValueError(f"El examen tiene {len(missing_keys)} pregunta(s) sin clave de respuesta configurada.")
+
         previous = AcademicRepository.get_attempts_by_student_and_exam(
             student_id, exam_id)
         if len(previous) >= exam.max_attempts:
@@ -627,6 +652,32 @@ class AcademicService:
             )
             db.session.add(attempt_answer)
         attempt.submitted_at = datetime.now(timezone.utc)
+
+        # Calcular y congelar el snapshot inmutable de calificación (BE-01, BE-03)
+        questions = AcademicRepository.get_questions_by_exam(attempt.exam_id)
+        answer_keys = AcademicRepository.get_answer_keys_by_exam(attempt.exam_id)
+        key_map = {k.question_id: k.correct_option_id for k in answer_keys if k.is_active}
+        student_map = {ans['question_id']: ans['selected_option_id'] for ans in answers}
+
+        total_possible = sum(q.points for q in questions) if questions else 0
+        earned = 0
+        for q in questions:
+            correct_opt = key_map.get(q.id)
+            selected_opt = student_map.get(q.id)
+            if correct_opt is not None and selected_opt == correct_opt:
+                earned += q.points
+
+        score = round((earned / total_possible) * 100) if total_possible > 0 else 0
+        exam = AcademicRepository.get_exam_by_id(attempt.exam_id)
+        passed = score >= (exam.passing_score if exam else 60)
+
+        # Persistir snapshot inmutable
+        attempt.score = score
+        attempt.passed = passed
+        attempt.total_questions = len(questions)
+        attempt.total_points = total_possible
+        attempt.earned_points = earned
+
         db.session.commit()
         return AcademicService._calculate_result(attempt_id)
 
@@ -671,6 +722,8 @@ class AcademicService:
                 "passed": False,
                 "correct_answers": 0,
                 "total_questions": 0,
+                "total_points": 0,
+                "earned_points": 0,
                 "passing_score": exam.passing_score if exam else 0,
                 "submitted_at": None,
                 "status": "in_progress",
@@ -680,11 +733,12 @@ class AcademicService:
         student_map = {a.question_id: a.selected_option_id
                        for a in student_answers}
         answer_keys = AcademicRepository.get_answer_keys_by_exam(attempt.exam_id)
-        key_map = {k.question_id: k.correct_option_id for k in answer_keys}
+        key_map = {k.question_id: k.correct_option_id for k in answer_keys if k.is_active}
         
         questions = AcademicRepository.get_questions_by_exam(attempt.exam_id)
-        total_questions = len(key_map)
         correct_count = 0
+        earned_calculated = 0
+        total_possible = sum(q.points for q in questions) if questions else 0
         question_results = []
         
         for q in questions:
@@ -695,6 +749,7 @@ class AcademicService:
             
             if is_correct:
                 correct_count += 1
+                earned_calculated += q.points
                 
             options = AcademicRepository.get_options_by_question(qid)
             opt_map = {o.id: o.text for o in options}
@@ -702,6 +757,7 @@ class AcademicService:
             question_results.append({
                 "question_id": qid,
                 "statement": q.statement,
+                "points": q.points,
                 "selected_option_id": selected_opt,
                 "selected_option_text": opt_map.get(selected_opt) if selected_opt else None,
                 "correct_option_id": correct_opt,
@@ -709,10 +765,27 @@ class AcademicService:
                 "is_correct": is_correct
             })
             
-        score = round(
-            (correct_count / total_questions) * 100
-        ) if total_questions > 0 else 0
-        passed = score >= exam.passing_score
+        # Snapshot inmutable (BE-03): si ya está persistido, usamos el snapshot
+        if attempt.score is not None:
+            score = attempt.score
+            passed = attempt.passed if attempt.passed is not None else (score >= exam.passing_score if exam else False)
+            total_questions = attempt.total_questions or len(questions)
+            total_points = attempt.total_points if attempt.total_points is not None else total_possible
+            earned_points = attempt.earned_points if attempt.earned_points is not None else earned_calculated
+        else:
+            # Backfill para intentos históricos
+            score = round((earned_calculated / total_possible) * 100) if total_possible > 0 else 0
+            passed = score >= exam.passing_score if exam else False
+            total_questions = len(questions)
+            total_points = total_possible
+            earned_points = earned_calculated
+            attempt.score = score
+            attempt.passed = passed
+            attempt.total_questions = total_questions
+            attempt.total_points = total_points
+            attempt.earned_points = earned_points
+            db.session.commit()
+
         # Obtener título del OVA para filtrado en historial
         ova_title = None
         if exam and exam.ova_id:
@@ -728,7 +801,9 @@ class AcademicService:
             "passed": passed,
             "correct_answers": correct_count,
             "total_questions": total_questions,
-            "passing_score": exam.passing_score,
+            "total_points": total_points,
+            "earned_points": earned_points,
+            "passing_score": exam.passing_score if exam else 0,
             "submitted_at": attempt.submitted_at.isoformat(),
             "status": "completed",
             "question_results": question_results

@@ -149,14 +149,22 @@ class SecurityService:
         person = SecurityRepository.get_person_by_id(user.person_id)
         email_dest = person.email if person and person.email else f"{user.username}@colegio.edu.co"
         
-        # Para el portal web y la app, les devolvemos el raw_token en consola
-        # ya que no tenemos un servidor SMTP activo. 
-        # (En producción esto no se devuelve en la API)
+        # SEG-08: En producción o cuando ENABLE_DEV_TOKEN sea falso, NUNCA se expone
+        # el token en la respuesta pública de la API.
+        from config import IS_PRODUCTION
+        import os
+        enable_dev_token = (
+            not IS_PRODUCTION and 
+            os.getenv('ENABLE_DEV_TOKEN', 'true').lower() == 'true'
+        )
         
-        return {
-            "message": f"Instrucciones de recuperación enviadas a {email_dest}",
-            "dev_token": raw_token  # Exclusivo para QA/Sustentación
+        response = {
+            "message": f"Instrucciones de recuperación enviadas a {email_dest}"
         }
+        if enable_dev_token:
+            response["dev_token"] = raw_token  # Exclusivo para desarrollo/pruebas locales controladas
+            
+        return response
 
     @staticmethod
     def reset_password(raw_token: str, new_password: str) -> dict:
