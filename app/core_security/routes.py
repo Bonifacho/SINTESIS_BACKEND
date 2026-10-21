@@ -168,7 +168,7 @@ def logout():
 
 # ── USUARIOS ──────────────────────────────────────────────────────────────────
 @security_bp.route('/users', methods=['GET'])
-@jwt_required()
+@role_required('administrador', 'docente')
 def get_users():
     try:
         return jsonify({"data": SecurityService.get_all_users()}), 200
