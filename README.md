@@ -1,314 +1,210 @@
-# SÍNTESIS API (MVP)
+# 🛡️ SÍNTESIS API — Backend RESTful (Flask & SQLAlchemy)
 
-Sistema INtegral Tecnológico para la Enseñanza y el Seguimiento Interactivo Secuencial.
+<div align="center">
+  <img src="https://img.shields.io/badge/Estado-PRODUCCI%C3%93N_STABLE-success" alt="Estado" />
+  <img src="https://img.shields.io/badge/Python-3.12%2B-blue?logo=python" alt="Python 3.12" />
+  <img src="https://img.shields.io/badge/Framework-Flask_3.1-black?logo=flask" alt="Flask" />
+  <img src="https://img.shields.io/badge/ORM-SQLAlchemy_2.0-red" alt="SQLAlchemy" />
+  <img src="https://img.shields.io/badge/Database-MySQL%20%7C%20MariaDB-4479A1?logo=mysql" alt="Database" />
+  <img src="https://img.shields.io/badge/Auth-JWT_RBAC-orange?logo=jsonwebtokens" alt="JWT" />
+</div>
 
-Backend API en Flask para un LMS con separación por dominios:
+> **Sistema INtegral Tecnológico para la Enseñanza y el Seguimiento Interactivo Secuencial.**
 
-- `core_security`: identidad, usuarios, roles y autenticación.
-- `core_academic`: grupos, estructura pedagógica, matrícula y progreso.
-
----
-
-## 1 Resumen funcional
-
-Este proyecto implementa el MVP del backend de una plataforma educativa con:
-
-- Registro y login con JWT.
-- Gestión de entidades de seguridad (roles, personas, usuarios).
-- Gestión académica (grupos, temas, lecciones, actividades, matrículas y progreso).
-- Soft Delete por `is_active` en la mayoría de entidades.
-- Migrations con Alembic / Flask-Migrate (enfoque code-first).
-
-La aplicación expone dos blueprints principales:
-
-- Seguridad: `/api/v1/security/...`
-- Académico: `/api/v1/academic/...`
-
-También tiene endpoints base de observabilidad:
-
-- `GET /health`
-- `GET /`
+Backend API centralizado para la plataforma educativa **SÍNTESIS**, estructurado bajo una arquitectura limpia y modular con separación estricta por dominios pedagógicos y de seguridad.
 
 ---
 
-## 2 Stack tecnológico
+## 📑 Tabla de Contenidos
 
-- Python `>=3.12`
-- Flask
-- Flask-SQLAlchemy
-- Flask-Migrate (Alembic)
-- MariaDB/MySQL vía `PyMySQL`
-- `python-dotenv`
-- Werkzeug Security (`generate_password_hash`, `check_password_hash`)
-- JWT (`flask-jwt-extended` usado en código)
-
-Dependencias declaradas en `pyproject.toml`:
-
-- `flask-migrate>=4.1.0`
-- `flask-sqlalchemy>=3.1.1`
-- `pymysql>=1.1.2`
-- `python-dotenv>=1.2.1`
-
-Dependencias bloqueadas (resueltas) en `uv.lock` incluyen, entre otras:
-
-- `flask`, `sqlalchemy`, `alembic`, `werkzeug`, `jinja2`, `greenlet`.
+1. [Resumen Funcional y Arquitectura](#-resumen-funcional-y-arquitectura)
+2. [Stack Tecnológico](#-stack-tecnológico)
+3. [Estructura del Proyecto](#-estructura-del-proyecto)
+4. [Modelo de Datos y Entidades](#-modelo-de-datos-y-entidades)
+5. [Seguridad y Control de Acceso (RBAC)](#-seguridad-y-control-de-acceso-rbac)
+6. [Catálogo de Endpoints](#-catálogo-de-endpoints)
+7. [Instalación y Ejecución Local](#-instalación-y-ejecución-local)
+8. [Despliegue y Producción](#-despliegue-y-producción)
 
 ---
 
-## 3 Estructura del proyecto
+## 🌟 Resumen Funcional y Arquitectura
+
+La API implementa un modelo desacoplado basado en Blueprints de Flask y el patrón **Repository-Service-Controller**:
+
+* **`core_security`**: Identidad, usuarios, personas naturales, roles y autenticación mediante JWT (Access & Refresh tokens).
+* **`core_academic`**: Estructura curricular de grupos, matrículas, temas y el ecosistema completo de **OVAs (Objetos Virtuales de Aprendizaje)**, recursos pedagógicos multimedia y motor transaccional de evaluaciones.
+
+---
+
+## 🛠️ Stack Tecnológico
+
+* **Lenguaje:** Python `>=3.12`
+* **Framework:** Flask 3.1
+* **ORM:** Flask-SQLAlchemy 3.1 & SQLAlchemy 2.0
+* **Migraciones:** Alembic & Flask-Migrate
+* **Conector de BD:** PyMySQL (MariaDB / MySQL)
+* **Autenticación:** Flask-JWT-Extended 4.7
+* **Servidor WSGI de Producción:** Gunicorn 25.3
+* **CORS:** Flask-CORS 6.0
+* **Gestión de Entorno:** python-dotenv 1.2
+
+---
+
+## 📂 Estructura del Proyecto
 
 ```text
-SINTESIS/
+SINTESIS_BACKEND/
 ├── app/
-│   ├── __init__.py                # App factory, registro de blueprints, health/index
-│   ├── extensions.py              # db, migrate, jwt
-│   ├── core_security/
+│   ├── __init__.py                # App Factory (create_app), blueprints y health checks
+│   ├── extensions.py              # Inicialización de db, migrate, jwt y cors
+│   │
+│   ├── core_security/             # DOMINIO DE SEGURIDAD
 │   │   ├── models.py              # Role, Person, User
-│   │   ├── repositories.py        # Acceso a datos de seguridad
-│   │   ├── services.py            # Lógica de negocio de seguridad
+│   │   ├── repositories.py        # Consultas SQL y persistencia
+│   │   ├── services.py            # Hashing bcrypt, login, registro y tokens
 │   │   └── routes.py              # Endpoints /api/v1/security
-│   ├── core_academic/
-│   │   ├── models.py              # Group, Enrollment, Topic, Lesson, Activity, StudentProgress
-│   │   ├── repositories.py        # Acceso a datos académicos
-│   │   ├── services.py            # Lógica de negocio académica
+│   │
+│   ├── core_academic/             # DOMINIO ACADÉMICO Y EVALUATIVO
+│   │   ├── models.py              # Group, Topic, OVA, OVAResource, Exam, Question, Option, Attempt
+│   │   ├── repositories.py        # Consultas de cursos, OVAs y respuestas
+│   │   ├── services.py            # Lógica de negocio, cálculo de notas y snapshots
 │   │   └── routes.py              # Endpoints /api/v1/academic
+│   │
 │   └── utils/
-│       └── responses.py           # (actualmente vacío)
-├── migrations/
-│   ├── env.py
-│   ├── alembic.ini
-│   └── versions/                  # Historial de revisiones de esquema
-├── run.py                         # Punto de arranque principal de Flask
-├── main.py                        # Script placeholder independiente
-├── config.py                      # Configuración por variables de entorno
-├── pyproject.toml                 # Metadatos y dependencias
-├── uv.lock                        # Lock de dependencias
+│       └── responses.py           # Helpers estándar para respuestas JSON
+│
+├── migrations/                    # Control de versiones del esquema (Alembic)
+│   └── versions/                  # Revisiones históricas de la base de datos
+├── config.py                      # Configuración dinámica (Dev, Test, Prod)
+├── requirements.txt               # Dependencias fijadas para despliegue
+├── pyproject.toml                 # Metadatos del paquete
+├── run.py                         # Entrypoint de desarrollo local
 └── README.md
 ```
 
 ---
 
-## 4 Arquitectura y responsabilidades
+## 🗄️ Modelo de Datos y Entidades
 
-Patrón aplicado por dominio:
+### 1. Dominio de Seguridad
+* **`roles`**: Catálogo de roles del sistema (`administrador`, `docente`, `estudiante`, `practicante`).
+* **`persons`**: Datos biográficos del usuario (nombres, apellidos, número de documento).
+* **`users`**: Credenciales de acceso (`username`, `password_hash`), estado activo y llaves foráneas a `Person` y `Role`.
 
-- **`models.py`**: definición ORM (estructura de tablas/relaciones).
-- **`repositories.py`**: encapsula consultas y persistencia.
-- **`services.py`**: reglas de negocio y validaciones.
-- **`routes.py`**: capa HTTP (validación de payload, códigos de estado, respuestas JSON).
-
-En `app/__init__.py`:
-
-- Se crea la app (`create_app`).
-- Se cargan configuraciones desde `Config`.
-- Se inicializan extensiones (`db`, `migrate`, `jwt`).
-- Se registran blueprints de seguridad y académico.
-
----
-
-## 5 Modelo de datos
-
-### 5.1 Dominio de seguridad
-
-- **`roles`**
-	- `id`, `name` (único), `description`, `is_active`
-- **`persons`**
-	- `id`, `first_name`, `last_name`, `document_id` (único), `created_at`, `is_active`
-- **`users`**
-	- `id`, `username` (único), `password_hash`, `is_active`, `person_id` (único FK), `role_id` (FK)
-
-Relaciones:
-
-- `Role 1:N User`
-- `Person 1:1 User`
-
-### 5.2 Dominio académico
-
-- **`academic_groups`**
-	- `id`, `name`, `teacher_id` (FK a `users`), `created_at`, `is_active`
-- **`academic_enrollments`**
-	- `id`, `group_id` (FK), `student_id` (FK a `users`), `enrolled_at`, `is_active`
-- **`academic_topics`**
-	- `id`, `title`, `group_id` (FK), `order_index`, `is_active`
-- **`academic_lessons`**
-	- `id`, `title`, `topic_id` (FK), `order_index`, `is_active`
-- **`academic_activities`**
-	- `id`, `title`, `lesson_id` (FK), `ui_config` (JSON), `passing_score`, `order_index`, `is_active`
-- **`academic_student_progress`**
-	- `id`, `student_id` (FK a `users`), `activity_id` (FK), `score`, `passed`, `completed_at`, `is_active`
-
-Relaciones de contenido:
-
-- `Group 1:N Topic`
-- `Topic 1:N Lesson`
-- `Lesson 1:N Activity`
+### 2. Dominio Académico
+* **`academic_groups`**: Cursos o grupos asignados a un docente.
+* **`academic_enrollments`**: Matrículas de estudiantes en grupos.
+* **`academic_topics`**: Unidades pedagógicas o temas temáticos dentro de un grupo.
+* **`academic_ovas`**: Objetos Virtuales de Aprendizaje que agrupan materiales y su prueba.
+* **`academic_ova_resources`**: Recursos individuales de estudio:
+  * `video` (reproductor nativo y URLs YouTube/Vimeo)
+  * `pdf` (visores de documentos)
+  * `link` (enlaces externos)
+  * `text` (texto enriquecido markdown con tipografía ajustable)
+* **`exam_exams`**: Configuración de la evaluación del OVA (`passing_score` %, `max_attempts`).
+* **`exam_questions`**: Preguntas de opción múltiple con puntaje asignado.
+* **`exam_options`**: Opciones de respuesta para cada pregunta.
+* **`exam_answer_key`**: Clave de respuestas correctas (tabla protegida no accesible públicamente).
+* **`exam_attempts`**: Huella inmutable de cada intento de evaluación (fecha, puntaje porcentual, cantidad de aciertos y estado de aprobación congelados al momento de entrega).
 
 ---
 
-## 6 Migraciones (Alembic)
+## 🔒 Seguridad y Control de Acceso (RBAC)
 
-Cadena detectada en `migrations/versions`:
+1. **Decorador `@role_required(*roles)`**:
+   Protege las rutas a nivel de controlador exigiendo que el token JWT contenga los privilegios adecuados.
+2. **Protección de Listado de Usuarios (SEG-04)**:
+   La consulta general de usuarios (`GET /api/v1/security/users`) está restringida a administradores y docentes.
+3. **Tablas Privilegiadas Ocultas**:
+   La tabla `exam_answer_key` nunca se envía al cliente. La calificación se realiza de forma atómica en el servidor.
+4. **Soft Delete**:
+   Entidades principales preservan integridad referencial mediante el flag `is_active`.
 
-1. `de0b79ce6bbc` → tablas RBAC iniciales (`persons`, `roles`, `users`)
-2. `10c045cf3e6b` → tablas académicas base (`groups`, `enrollments`, `topics`, `lessons`, `activities`)
-3. `fd5e672f2758` → `academic_student_progress`
-4. `7687be996e9d` → `is_active` en `academic_groups`
-5. `671eda77e5e6` → `is_active` en `academic_topics`, `academic_lessons`, `academic_activities`
-6. `9f6c64d0700b` → `is_active` en `roles`, `persons`, `academic_enrollments`, `academic_student_progress`
+---
 
-Comandos típicos:
+## 📡 Catálogo de Endpoints Principales
+
+### Seguridad (`/api/v1/security`)
+| Método | Endpoint | Descripción | Acceso |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/login` | Autenticación y retorno de JWT | Público |
+| `POST` | `/register` | Registro de usuario | Admin |
+| `POST` | `/refresh` | Renovación de token expirado | Bearer Token |
+| `GET` | `/users` | Listado general de usuarios | Admin, Docente |
+| `GET` | `/users/<id>` | Detalle de usuario | Autenticado |
+| `GET` | `/roles` | Listado de roles disponibles | Admin |
+
+### Académico (`/api/v1/academic`)
+| Método | Endpoint | Descripción | Acceso |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/groups` | Grupos del docente o sistema | Docente, Admin |
+| `POST` | `/groups` | Crear nuevo grupo | Docente, Admin |
+| `GET` | `/groups/<id>/topics` | Temas asociados a un grupo | Autenticado |
+| `POST` | `/topics` | Crear tema o unidad | Docente, Admin |
+| `GET` | `/topics/<id>/ovas` | OVAs asociados a un tema | Autenticado |
+| `POST` | `/ovas` | Crear nuevo OVA | Docente, Admin |
+| `POST` | `/resources` | Asociar recurso multimedia a un OVA | Docente, Admin |
+| `GET` | `/exams/by-ova/<id>/teacher` | Obtener examen con opciones (docente) | Docente, Admin |
+| `GET` | `/exams/by-ova/<id>/student` | Obtener examen para rendir (sin respuestas) | Estudiante |
+| `POST` | `/attempts` | Iniciar intento de examen | Estudiante |
+| `POST` | `/attempts/<id>/submit` | Enviar respuestas y calificar intento | Estudiante |
+| `GET` | `/attempts/<id>` | Obtener resultado detallado de intento | Autenticado |
+| `GET` | `/groups/<id>/attempts` | Resultados de exámenes de un grupo | Docente, Admin |
+
+---
+
+## ⚙️ Instalación y Ejecución Local
+
+1. **Clonar el repositorio**:
+   ```bash
+   git clone https://github.com/Bonifacho/SINTESIS_BACKEND.git
+   cd SINTESIS_BACKEND
+   ```
+
+2. **Crear y activar el entorno virtual**:
+   ```bash
+   python -m venv .venv
+   # En Windows PowerShell:
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+3. **Instalar dependencias**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configurar el archivo `.env`**:
+   Crear un archivo `.env` en la raíz con las siguientes variables:
+   ```env
+   FLASK_APP=run.py
+   FLASK_ENV=development
+   DATABASE_URL=mysql+pymysql://usuario:password@localhost:3306/sintesis_db
+   JWT_SECRET_KEY=tu_clave_secreta_jwt_muy_segura
+   JWT_ACCESS_TOKEN_EXPIRES=86400
+   PORT=5000
+   ```
+
+5. **Ejecutar migraciones**:
+   ```bash
+   flask db upgrade
+   ```
+
+6. **Iniciar el servidor de desarrollo**:
+   ```bash
+   python run.py
+   ```
+   La API quedará escuchando en `http://localhost:5000` con el health check en `/health`.
+
+---
+
+## 🚀 Despliegue y Producción
+
+Este backend está optimizado para ejecutarse en plataformas en la nube como **Render** utilizando Gunicorn:
 
 ```bash
-flask db migrate -m "mensaje"
-flask db upgrade
+gunicorn "run:app" --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
 ```
 
 ---
-
-## 7 Configuración de entorno
-
-Variables esperadas en `.env`:
-
-- `DATABASE_URL` (obligatoria para SQLAlchemy)
-- `SECRET_KEY` (opcional; tiene valor por defecto)
-- `JWT_SECRET_KEY` (opcional; tiene valor por defecto)
-
-Ejemplo:
-
-```env
-DATABASE_URL=mysql+pymysql://usuario:password@localhost:3306/sintesis
-SECRET_KEY=tu_secret_key
-JWT_SECRET_KEY=tu_jwt_secret_key
-```
-
----
-
-## 8 Ejecución local
-
-### Opción A (recomendada si usas `uv`)
-
-```bash
-uv sync
-uv run python run.py
-```
-
-### Opción B (venv clásico)
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -U pip
-pip install flask flask-sqlalchemy flask-migrate flask-jwt-extended pymysql python-dotenv
-python run.py
-```
-
-La API queda por defecto en `http://localhost:5000`.
-
----
-
-## 9 Endpoints
-
-### 9.1 Health
-
-- `GET /health`
-- `GET /`
-
-### 9.2 Seguridad (`/api/v1/security`)
-
-Autenticación:
-
-- `POST /register`
-- `POST /login`
-
-Roles:
-
-- `POST /roles` (JWT)
-- `GET /roles` (JWT)
-- `GET /roles/<role_id>` (JWT)
-- `PUT /roles/<role_id>` (JWT)
-- `DELETE /roles/<role_id>` (JWT, soft delete)
-
-Personas:
-
-- `GET /persons` (JWT)
-- `GET /persons/<person_id>` (JWT)
-- `PUT /persons/<person_id>` (JWT)
-- `DELETE /persons/<person_id>` (JWT, soft delete)
-
-Usuarios:
-
-- `GET /users` (JWT)
-- `GET /users/<user_id>` (JWT)
-- `PUT /users/<user_id>` (JWT)
-- `DELETE /users/<user_id>` (JWT, soft delete)
-
-### 9.3 Académico (`/api/v1/academic`)
-
-Grupos y árbol de contenido:
-
-- `POST /groups`
-- `POST /build-tree`
-- `GET /groups/<group_id>/course` (JWT)
-- `PUT /groups/<group_id>` (JWT)
-- `DELETE /groups/<group_id>` (JWT, soft delete)
-
-Temas:
-
-- `PUT /topics/<topic_id>` (JWT)
-- `DELETE /topics/<topic_id>` (JWT, soft delete)
-
-Lecciones:
-
-- `PUT /lessons/<lesson_id>` (JWT)
-- `DELETE /lessons/<lesson_id>` (JWT, soft delete)
-
-Actividades:
-
-- `PUT /activities/<activity_id>` (JWT)
-- `DELETE /activities/<activity_id>` (JWT, soft delete)
-
-Matrículas:
-
-- `POST /enrollments` (JWT)
-- `GET /groups/<group_id>/enrollments` (JWT)
-- `GET /enrollments/<enrollment_id>` (JWT)
-- `PUT /enrollments/<enrollment_id>` (JWT)
-- `DELETE /enrollments/<enrollment_id>` (JWT, soft delete)
-
-Progreso:
-
-- `POST /progress`
-- `GET /progress/student/<student_id>` (JWT)
-- `GET /progress/<progress_id>` (JWT)
-- `PUT /progress/<progress_id>` (JWT)
-- `DELETE /progress/<progress_id>` (JWT, soft delete)
-
----
-
-## 10 Convenciones funcionales observadas
-
-- Estrategia de **Soft Delete** generalizada (`is_active`).
-- Contraseñas siempre almacenadas como hash.
-- JWT con `identity=user.id` y `role` en claims adicionales.
-- `ui_config` permite agnosticismo de actividades (el backend no fija estructura pedagógica rígida).
-
----
-
-## 11 Notas de mantenimiento
-
-- `main.py` es un script placeholder y no es el entrypoint real de la API.
-- `app/utils/responses.py` existe pero está vacío.
-- `flask-jwt-extended` se usa en código y conviene mantenerlo explícito en dependencias declaradas.
-
----
-
-## 12 Estado del repositorio documentado
-
-Este README fue elaborado a partir del contenido actual de:
-
-- código fuente (`app/`, `run.py`, `config.py`, etc.),
-- migraciones (`migrations/`),
-- configuración y lock de dependencias (`pyproject.toml`, `uv.lock`),
-- artefactos de contexto (`AGENTES.md`, `guion_video.txt`).
-
-
+*Desarrollado para el proyecto de grado SÍNTESIS (2026).*
