@@ -196,23 +196,28 @@ class AcademicService:
     # ── MATRÍCULAS ────────────────────────────────────────────────────────────
     @staticmethod
     def create_enrollment(student_id: int, group_id: int, user_id: int = None, is_admin: bool = False) -> dict:
+        from sqlalchemy.exc import IntegrityError
         AcademicService.assert_teacher_ownership(group_id, user_id, is_admin)
-        group = AcademicRepository.get_group_by_id(group_id)
-        if not group or not group.is_active:
-            raise ValueError("Grupo no encontrado o inactivo")
-        with transactional_session():
-            existing = AcademicRepository.get_enrollment_by_student_and_group_any(
-                student_id, group_id)
-            if existing:
-                if existing.is_active:
-                    raise ValueError("El estudiante ya está matriculado en este grupo")
-                existing.is_active = True
-                existing.enrolled_at = datetime.now(timezone.utc)
-                db.session.flush()
-                created = existing
-            else:
-                enrollment = Enrollment(student_id=student_id, group_id=group_id)
-                created = AcademicRepository.create_enrollment(enrollment)
+        try:
+            with transactional_session():
+                # Bloqueo pesimista sobre el grupo para serializar matrículas concurrentes
+                group = AcademicRepository.get_group_by_id_for_update(group_id)
+                if not group or not group.is_active:
+                    raise ValueError("Grupo no encontrado o inactivo")
+                existing = AcademicRepository.get_enrollment_by_student_and_group_any(
+                    student_id, group_id)
+                if existing:
+                    if existing.is_active:
+                        raise ValueError("El estudiante ya está matriculado en este grupo")
+                    existing.is_active = True
+                    existing.enrolled_at = datetime.now(timezone.utc)
+                    db.session.flush()
+                    created = existing
+                else:
+                    enrollment = Enrollment(student_id=student_id, group_id=group_id)
+                    created = AcademicRepository.create_enrollment(enrollment)
+        except IntegrityError:
+            raise ValueError("El estudiante ya está matriculado en este grupo")
         return {
             "id": created.id, "student_id": created.student_id,
             "group_id": created.group_id,
@@ -222,33 +227,10 @@ class AcademicService:
 
     @staticmethod
     def get_enrollments_by_group(group_id: int) -> list:
-        from app.core_security.repositories import SecurityRepository
         group = AcademicRepository.get_group_by_id(group_id)
         if not group or not group.is_active:
             raise ValueError("Grupo no encontrado o inactivo")
-        enrollments = AcademicRepository.get_enrollments_by_group(group_id)
-        
-        result = []
-        for e in enrollments:
-            user = SecurityRepository.get_user_by_id(e.student_id)
-            if user:
-                person = SecurityRepository.get_person_by_id(user.person_id)
-                full_name = f"{person.first_name} {person.last_name}" if person else ""
-                username = user.username
-            else:
-                full_name = "Usuario Eliminado"
-                username = "eliminado"
-
-            result.append({
-                "id": e.id,
-                "student_id": e.student_id,
-                "full_name": full_name,
-                "username": username,
-                "group_id": e.group_id,
-                "enrolled_at": e.enrolled_at.isoformat(),
-                "is_active": e.is_active
-            })
-        return result
+        return AcademicRepository.get_enrollments_with_students_by_group(group_id)
 
     @staticmethod
     def get_enrollment_by_id(enrollment_id: int) -> dict:
@@ -647,7 +629,8 @@ class AcademicService:
     @staticmethod
     def start_attempt(student_id: int, exam_id: int) -> dict:
         with transactional_session():
-            exam = AcademicRepository.get_exam_by_id(exam_id)
+            # Bloqueo pesimista SELECT ... FOR UPDATE sobre el examen para serializar cupos concurrentes
+            exam = AcademicRepository.get_exam_by_id_for_update(exam_id)
             if not exam or not exam.is_active:
                 raise ValueError("Examen no encontrado o inactivo")
             # Validar que el estudiante esté matriculado en el grupo correspondiente al examen
@@ -667,9 +650,10 @@ class AcademicService:
             if missing_keys:
                 raise ValueError(f"El examen tiene {len(missing_keys)} pregunta(s) sin clave de respuesta configurada.")
 
-            previous = AcademicRepository.get_attempts_by_student_and_exam(
+            # Conteo SARGable y explícitamente parametrizado (covering index idx_attempt_student_exam_active)
+            previous_count = AcademicRepository.count_attempts_by_student_and_exam(
                 student_id, exam_id)
-            if len(previous) >= exam.max_attempts:
+            if previous_count >= exam.max_attempts:
                 raise ValueError(
                     f"Se alcanzó el límite de {exam.max_attempts} intento(s)")
             attempt = ExamAttempt(exam_id=exam_id, student_id=student_id)
@@ -682,7 +666,8 @@ class AcademicService:
     @staticmethod
     def submit_attempt(attempt_id: int, answers: list, student_id: int = None) -> dict:
         with transactional_session():
-            attempt = AcademicRepository.get_attempt_by_id(attempt_id)
+            # Bloqueo pesimista SELECT ... FOR UPDATE sobre el intento para evitar doble envío concurrente
+            attempt = AcademicRepository.get_attempt_by_id_for_update(attempt_id)
             if not attempt or not attempt.is_active:
                 raise ValueError("Intento no encontrado o inactivo")
             if student_id is not None and attempt.student_id != student_id:
@@ -782,6 +767,8 @@ class AcademicService:
         key_map = {k.question_id: k.correct_option_id for k in answer_keys if k.is_active}
         
         questions = AcademicRepository.get_questions_by_exam(attempt.exam_id)
+        # Carga en lote (batch loading) de todas las opciones del examen en 1 sola consulta SARGable
+        options_by_q = AcademicRepository.get_options_by_questions([q.id for q in questions])
         correct_count = 0
         earned_calculated = 0
         total_possible = sum(q.points for q in questions) if questions else 0
@@ -797,7 +784,7 @@ class AcademicService:
                 correct_count += 1
                 earned_calculated += q.points
                 
-            options = AcademicRepository.get_options_by_question(qid)
+            options = options_by_q.get(qid, [])
             opt_map = {o.id: o.text for o in options}
             
             question_results.append({
@@ -939,22 +926,26 @@ class AcademicService:
     @staticmethod
     def get_ovas_by_topic(topic_id: int) -> list:
         ovas = AcademicRepository.get_ovas_by_topic(topic_id)
+        if not ovas:
+            return []
+        ova_ids = [o.id for o in ovas]
+        resources_by_ova = AcademicRepository.get_resources_by_ovas(ova_ids)
+        exams_by_ova = AcademicRepository.get_exams_by_ovas(ova_ids)
+
         result = []
         for o in ovas:
-            res_list = []
-            for r in o.resources:
-                if r.is_active:
-                    res_list.append({
-                        "id": r.id,
-                        "resource_type": r.resource_type.value,
-                        "url": r.url,
-                        "content": r.content,
-                        "display_title": r.display_title,
-                        "order_index": r.order_index
-                    })
-            
-            # Verificar si tiene examen
-            exam = AcademicRepository.get_exam_by_ova(o.id)
+            res_list = [
+                {
+                    "id": r.id,
+                    "resource_type": r.resource_type.value,
+                    "url": r.url,
+                    "content": r.content,
+                    "display_title": r.display_title,
+                    "order_index": r.order_index,
+                }
+                for r in resources_by_ova.get(o.id, [])
+            ]
+            exam = exams_by_ova.get(o.id)
             has_exam = exam is not None and exam.is_active
 
             result.append({
@@ -975,9 +966,10 @@ class AcademicService:
         if not exam or not exam.is_active:
             raise ValueError("Examen no encontrado o inactivo")
         questions = AcademicRepository.get_questions_by_exam(exam.id)
+        options_by_q = AcademicRepository.get_options_by_questions([q.id for q in questions])
         qs_data = []
         for q in questions:
-            options = AcademicRepository.get_options_by_question(q.id)
+            options = options_by_q.get(q.id, [])
             qs_data.append({
                 "id": q.id,
                 "statement": q.statement,
@@ -1002,10 +994,13 @@ class AcademicService:
         if not exam or not exam.is_active:
             raise ValueError("Examen no encontrado o inactivo")
         questions = AcademicRepository.get_questions_by_exam(exam.id)
+        options_by_q = AcademicRepository.get_options_by_questions([q.id for q in questions])
+        answer_keys = AcademicRepository.get_answer_keys_by_exam(exam.id)
+        key_map = {k.question_id: k.correct_option_id for k in answer_keys if k.is_active}
         qs_data = []
         for q in questions:
-            options = AcademicRepository.get_options_by_question(q.id)
-            correct_option_id = q.answer_key.correct_option_id if q.answer_key else None
+            options = options_by_q.get(q.id, [])
+            correct_option_id = key_map.get(q.id)
             qs_data.append({
                 "id": q.id,
                 "statement": q.statement,
@@ -1029,42 +1024,8 @@ class AcademicService:
 
     @staticmethod
     def get_group_activity(group_id: int) -> list:
-        """Retorna el historial de tracking silencioso de un grupo."""
-        from app.core_academic.models import StudentProgress, OVA, Topic
-        from app.core_security.repositories import SecurityRepository
-        from app.extensions import db
-        
-        enrollments = AcademicRepository.get_enrollments_by_group(group_id)
-        student_ids = [e.student_id for e in enrollments]
-        if not student_ids:
-            return []
-            
-        # JOIN estricto: filtrado por group_id Y solo para estudiantes del grupo
-        records = db.session.query(StudentProgress, OVA).join(
-            OVA, StudentProgress.ova_id == OVA.id
-        ).join(
-            Topic, OVA.topic_id == Topic.id
-        ).filter(
-            Topic.group_id == group_id,
-            StudentProgress.user_id.in_(student_ids)
-        ).order_by(StudentProgress.created_at.desc()).all()
-        
-        result = []
-        for r, ova in records:
-            user = SecurityRepository.get_user_by_id(r.user_id)
-            person = SecurityRepository.get_person_by_id(user.person_id) if user else None
-            
-            result.append({
-                "user_id": r.user_id,
-                "student_name": f"{person.first_name} {person.last_name}" if person else "Desconocido",
-                "ova_id": r.ova_id,
-                "ova_title": ova.title if ova else "OVA eliminada",
-                "topic_name": r.topic_name,
-                "resource_name": r.resource_name,
-                "action": r.action,
-                "timestamp": r.created_at.isoformat() if r.created_at else None
-            })
-        return result
+        """Retorna el historial de tracking silencioso de un grupo mediante una sola consulta SARGable."""
+        return AcademicRepository.get_group_activity_rows(group_id)
 
     @staticmethod
     def get_attempts_by_group(group_id: int) -> list:
