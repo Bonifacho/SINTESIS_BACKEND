@@ -1,5 +1,6 @@
 # app/core_academic/repositories.py
 from app.extensions import db
+from app.utils.database import persist_entity
 from app.core_academic.models import (
     Group, Enrollment, Topic,
     OVA, OVAResource,
@@ -13,10 +14,8 @@ class AcademicRepository:
 
     # ── GRUPOS ────────────────────────────────────────────────────────────────
     @staticmethod
-    def create_group(group: Group) -> Group:
-        db.session.add(group)
-        db.session.commit()
-        return group
+    def create_group(group: Group, commit: bool = True) -> Group:
+        return persist_entity(group, commit=commit)
 
     @staticmethod
     def get_group_by_id(group_id: int) -> Group:
@@ -28,10 +27,8 @@ class AcademicRepository:
 
     # ── MATRÍCULAS ────────────────────────────────────────────────────────────
     @staticmethod
-    def create_enrollment(enrollment: Enrollment) -> Enrollment:
-        db.session.add(enrollment)
-        db.session.commit()
-        return enrollment
+    def create_enrollment(enrollment: Enrollment, commit: bool = True) -> Enrollment:
+        return persist_entity(enrollment, commit=commit)
 
     @staticmethod
     def get_enrollment_by_id(enrollment_id: int) -> Enrollment:
@@ -49,12 +46,17 @@ class AcademicRepository:
             student_id=student_id, group_id=group_id, is_active=True
         ).first()
 
+    @staticmethod
+    def get_enrollment_by_student_and_group_any(student_id: int, group_id: int):
+        """Busca matrícula incluyendo registros inactivos (soft-delete)."""
+        return db.session.query(Enrollment).filter_by(
+            student_id=student_id, group_id=group_id
+        ).first()
+
     # ── TEMAS ─────────────────────────────────────────────────────────────────
     @staticmethod
-    def create_topic(topic: Topic) -> Topic:
-        db.session.add(topic)
-        db.session.commit()
-        return topic
+    def create_topic(topic: Topic, commit: bool = True) -> Topic:
+        return persist_entity(topic, commit=commit)
 
     @staticmethod
     def get_topic_by_id(topic_id: int) -> Topic:
@@ -62,10 +64,8 @@ class AcademicRepository:
 
     # ── OVAs ──────────────────────────────────────────────────────────────────
     @staticmethod
-    def create_ova(ova: OVA) -> OVA:
-        db.session.add(ova)
-        db.session.commit()
-        return ova
+    def create_ova(ova: OVA, commit: bool = True) -> OVA:
+        return persist_entity(ova, commit=commit)
 
     @staticmethod
     def get_ova_by_id(ova_id: int) -> OVA:
@@ -79,10 +79,8 @@ class AcademicRepository:
 
     # ── RECURSOS DE OVA ───────────────────────────────────────────────────────
     @staticmethod
-    def create_resource(resource: OVAResource) -> OVAResource:
-        db.session.add(resource)
-        db.session.commit()
-        return resource
+    def create_resource(resource: OVAResource, commit: bool = True) -> OVAResource:
+        return persist_entity(resource, commit=commit)
 
     @staticmethod
     def get_resource_by_id(resource_id: int) -> OVAResource:
@@ -96,10 +94,8 @@ class AcademicRepository:
 
     # ── EXÁMENES ──────────────────────────────────────────────────────────────
     @staticmethod
-    def create_exam(exam: Exam) -> Exam:
-        db.session.add(exam)
-        db.session.commit()
-        return exam
+    def create_exam(exam: Exam, commit: bool = True) -> Exam:
+        return persist_entity(exam, commit=commit)
 
     @staticmethod
     def get_exam_by_id(exam_id: int) -> Exam:
@@ -111,12 +107,17 @@ class AcademicRepository:
             ova_id=ova_id, is_active=True
         ).first()
 
+    @staticmethod
+    def get_exam_by_ova_any(ova_id: int) -> Exam:
+        """Busca examen asociado a un OVA incluyendo registros inactivos (soft-delete)."""
+        return db.session.query(Exam).filter_by(
+            ova_id=ova_id
+        ).first()
+
     # ── PREGUNTAS ─────────────────────────────────────────────────────────────
     @staticmethod
-    def create_question(question: Question) -> Question:
-        db.session.add(question)
-        db.session.commit()
-        return question
+    def create_question(question: Question, commit: bool = True) -> Question:
+        return persist_entity(question, commit=commit)
 
     @staticmethod
     def get_question_by_id(question_id: int) -> Question:
@@ -130,10 +131,8 @@ class AcademicRepository:
 
     # ── OPCIONES ──────────────────────────────────────────────────────────────
     @staticmethod
-    def create_option(option: Option) -> Option:
-        db.session.add(option)
-        db.session.commit()
-        return option
+    def create_option(option: Option, commit: bool = True) -> Option:
+        return persist_entity(option, commit=commit)
 
     @staticmethod
     def get_option_by_id(option_id: int) -> Option:
@@ -147,15 +146,20 @@ class AcademicRepository:
 
     # ── CLAVE DE RESPUESTAS ───────────────────────────────────────────────────
     @staticmethod
-    def create_answer_key(answer_key: AnswerKey) -> AnswerKey:
-        db.session.add(answer_key)
-        db.session.commit()
-        return answer_key
+    def create_answer_key(answer_key: AnswerKey, commit: bool = True) -> AnswerKey:
+        return persist_entity(answer_key, commit=commit)
 
     @staticmethod
     def get_answer_key_by_question(question_id: int) -> AnswerKey:
         return db.session.query(AnswerKey).filter_by(
             question_id=question_id, is_active=True
+        ).first()
+
+    @staticmethod
+    def get_answer_key_by_question_any(question_id: int) -> AnswerKey:
+        """Busca clave de respuesta por pregunta incluyendo registros inactivos (soft-delete)."""
+        return db.session.query(AnswerKey).filter_by(
+            question_id=question_id
         ).first()
 
     @staticmethod
@@ -169,10 +173,8 @@ class AcademicRepository:
 
     # ── INTENTOS ──────────────────────────────────────────────────────────────
     @staticmethod
-    def create_attempt(attempt: ExamAttempt) -> ExamAttempt:
-        db.session.add(attempt)
-        db.session.commit()
-        return attempt
+    def create_attempt(attempt: ExamAttempt, commit: bool = True) -> ExamAttempt:
+        return persist_entity(attempt, commit=commit)
 
     @staticmethod
     def get_attempt_by_id(attempt_id: int) -> ExamAttempt:
@@ -220,10 +222,8 @@ class AcademicRepository:
 
     # ── RESPUESTAS DEL INTENTO ────────────────────────────────────────────────
     @staticmethod
-    def create_attempt_answer(answer: AttemptAnswer) -> AttemptAnswer:
-        db.session.add(answer)
-        db.session.commit()
-        return answer
+    def create_attempt_answer(answer: AttemptAnswer, commit: bool = True) -> AttemptAnswer:
+        return persist_entity(answer, commit=commit)
 
     @staticmethod
     def get_answers_by_attempt(attempt_id: int):
@@ -231,12 +231,10 @@ class AcademicRepository:
             attempt_id=attempt_id, is_active=True
         ).all()
         
-# ── OBSERVADORES (PRACTICANTES) ───────────────────────────────────────────
+    # ── OBSERVADORES (PRACTICANTES) ───────────────────────────────────────────
     @staticmethod
-    def create_observer(observer: GroupObserver) -> GroupObserver:
-        db.session.add(observer)
-        db.session.commit()
-        return observer
+    def create_observer(observer: GroupObserver, commit: bool = True) -> GroupObserver:
+        return persist_entity(observer, commit=commit)
 
     @staticmethod
     def get_observer_by_id(observer_id: int) -> GroupObserver:
@@ -249,6 +247,13 @@ class AcademicRepository:
         return db.session.query(GroupObserver).filter_by(
             group_id=group_id, observer_id=observer_id,
             is_active=True).first()
+
+    @staticmethod
+    def get_observer_by_group_and_user_any(group_id: int,
+                                           observer_id: int) -> GroupObserver:
+        """Busca observador de grupo incluyendo registros inactivos (soft-delete)."""
+        return db.session.query(GroupObserver).filter_by(
+            group_id=group_id, observer_id=observer_id).first()
 
     @staticmethod
     def get_observers_by_group(group_id: int):
@@ -284,7 +289,5 @@ class AcademicRepository:
 
     # ── PROGRESO (TRACKING SILENCIOSO) ────────────────────────────────────
     @staticmethod
-    def create_progress(progress) -> 'StudentProgress':
-        db.session.add(progress)
-        db.session.commit()
-        return progress
+    def create_progress(progress, commit: bool = True) -> 'StudentProgress':
+        return persist_entity(progress, commit=commit)
