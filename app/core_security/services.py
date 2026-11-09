@@ -1,6 +1,7 @@
 # app/core_security/services.py
 from datetime import datetime, timezone
 from app.extensions import db
+from app.utils.database import transactional_session
 from app.core_security.models import (
     Person, User, Role, Permission,
     UserHasRole, RoleHasPermission, BlacklistedToken
@@ -46,25 +47,27 @@ class SecurityService:
                 f"El rol '{role_name}' no existe o está inactivo en la base de datos."
             )
 
-        # ── Crear persona ─────────────────────────────────────────────────
-        person = Person(
-            first_name=first_name,
-            last_name=last_name,
-            document_id=document_id
-        )
-        SecurityRepository.create_person(person)
+        # ── Transacción atómica ACID: Persona + Usuario + Rol (Todo o Nada) ──
+        with transactional_session():
+            # ── Crear persona ─────────────────────────────────────────────────
+            person = Person(
+                first_name=first_name,
+                last_name=last_name,
+                document_id=document_id
+            )
+            SecurityRepository.create_person(person, commit=False)
 
-        # ── Crear usuario vinculado a la persona ─────────────────────────
-        user = User(
-            username=username,
-            password_hash=generate_password_hash(password),
-            person_id=person.id
-        )
-        SecurityRepository.create_user(user)
+            # ── Crear usuario vinculado a la persona ─────────────────────────
+            user = User(
+                username=username,
+                password_hash=generate_password_hash(password),
+                person_id=person.id
+            )
+            SecurityRepository.create_user(user, commit=False)
 
-        # ── Asignar rol ───────────────────────────────────────────────────
-        user_role = UserHasRole(user_id=user.id, role_id=role.id)
-        SecurityRepository.assign_role_to_user(user_role)
+            # ── Asignar rol ───────────────────────────────────────────────────
+            user_role = UserHasRole(user_id=user.id, role_id=role.id)
+            SecurityRepository.assign_role_to_user(user_role, commit=False)
 
         return {
             "id": user.id,
@@ -114,12 +117,14 @@ class SecurityService:
     @staticmethod
     def logout_user(jti: str, user_id: int, expires_at: datetime) -> dict:
         """Revoca el JWT actual agregándolo a la blacklist."""
-        token = BlacklistedToken(
-            jti=jti,
-            user_id=user_id,
-            expires_at=expires_at
-        )
-        SecurityRepository.add_token_to_blacklist(token)
+        with transactional_session():
+            if not SecurityRepository.is_token_blacklisted(jti):
+                token = BlacklistedToken(
+                    jti=jti,
+                    user_id=user_id,
+                    expires_at=expires_at
+                )
+                SecurityRepository.add_token_to_blacklist(token, commit=False)
         return {"message": "Sesión cerrada correctamente"}
 
     @staticmethod
@@ -139,11 +144,12 @@ class SecurityService:
         # 2. Hashearlo para guardar en DB (por si la DB se compromete, los tokens no son usables)
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
         
-        # 3. Guardar en BD
+        # 3. Guardar en BD dentro de transacción ACID
         from app.core_security.models import PasswordResetToken
         expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
-        token_record = PasswordResetToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at)
-        SecurityRepository.create_password_reset_token(token_record)
+        with transactional_session():
+            token_record = PasswordResetToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at)
+            SecurityRepository.create_password_reset_token(token_record, commit=False)
         
         # 4. Simulación del envío de correo (preparado para integrar SMTP)
         person = SecurityRepository.get_person_by_id(user.person_id)
@@ -171,37 +177,43 @@ class SecurityService:
         import hashlib
         
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-        token_record = SecurityRepository.get_password_reset_token(token_hash)
-        
-        if not token_record:
-            raise ValueError("El token de recuperación es inválido.")
+        with transactional_session():
+            token_record = SecurityRepository.get_password_reset_token(token_hash)
             
-        if token_record.is_used:
-            raise ValueError("Este token ya fue utilizado.")
-            
-        if token_record.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-            raise ValueError("El token ha expirado.")
-            
-        user = SecurityRepository.get_user_by_id(token_record.user_id)
-        if not user or not user.is_active:
-            raise ValueError("El usuario asociado al token no es válido.")
-            
-        # Actualizar contraseña y marcar token
-        user.password_hash = generate_password_hash(new_password)
-        token_record.is_used = True
-        
-        from app.extensions import db
-        db.session.commit()
+            if not token_record:
+                raise ValueError("El token de recuperación es inválido.")
+                
+            if token_record.is_used:
+                raise ValueError("Este token ya fue utilizado.")
+                
+            if token_record.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+                raise ValueError("El token ha expirado.")
+                
+            user = SecurityRepository.get_user_by_id(token_record.user_id)
+            if not user or not user.is_active:
+                raise ValueError("El usuario asociado al token no es válido.")
+                
+            # Actualizar contraseña y marcar token de forma atómica
+            user.password_hash = generate_password_hash(new_password)
+            token_record.is_used = True
         
         return {"message": "La contraseña ha sido actualizada exitosamente."}
 
     # ── ROLES ─────────────────────────────────────────────────────────────────
     @staticmethod
     def create_role(name: str, description: str = None) -> dict:
-        if SecurityRepository.get_role_by_name(name):
+        existing = SecurityRepository.get_role_by_name(name)
+        if existing and existing.is_active:
             raise ValueError(f"El rol '{name}' ya existe")
-        role = Role(name=name, description=description)
-        created = SecurityRepository.create_role(role)
+        with transactional_session():
+            if existing and not existing.is_active:
+                existing.is_active = True
+                if description is not None:
+                    existing.description = description
+                created = existing
+            else:
+                role = Role(name=name, description=description)
+                created = SecurityRepository.create_role(role, commit=False)
         return {
             "id": created.id,
             "name": created.name,
@@ -217,20 +229,28 @@ class SecurityService:
 
     @staticmethod
     def soft_delete_role(role_id: int) -> dict:
-        role = SecurityRepository.get_role_by_id(role_id)
-        if not role or not role.is_active:
-            raise ValueError("Rol no encontrado o ya inactivo")
-        role.is_active = False
-        db.session.commit()
+        with transactional_session():
+            role = SecurityRepository.get_role_by_id(role_id)
+            if not role or not role.is_active:
+                raise ValueError("Rol no encontrado o ya inactivo")
+            role.is_active = False
         return {"message": f"Rol {role_id} desactivado (Soft Delete)"}
 
     # ── PERMISOS ──────────────────────────────────────────────────────────────
     @staticmethod
     def create_permission(name: str, description: str = None) -> dict:
-        if SecurityRepository.get_permission_by_name(name):
+        existing = SecurityRepository.get_permission_by_name(name)
+        if existing and existing.is_active:
             raise ValueError(f"El permiso '{name}' ya existe")
-        permission = Permission(name=name, description=description)
-        created = SecurityRepository.create_permission(permission)
+        with transactional_session():
+            if existing and not existing.is_active:
+                existing.is_active = True
+                if description is not None:
+                    existing.description = description
+                created = existing
+            else:
+                permission = Permission(name=name, description=description)
+                created = SecurityRepository.create_permission(permission, commit=False)
         return {
             "id": created.id,
             "name": created.name,
@@ -246,11 +266,11 @@ class SecurityService:
 
     @staticmethod
     def soft_delete_permission(permission_id: int) -> dict:
-        p = SecurityRepository.get_permission_by_id(permission_id)
-        if not p or not p.is_active:
-            raise ValueError("Permiso no encontrado o ya inactivo")
-        p.is_active = False
-        db.session.commit()
+        with transactional_session():
+            p = SecurityRepository.get_permission_by_id(permission_id)
+            if not p or not p.is_active:
+                raise ValueError("Permiso no encontrado o ya inactivo")
+            p.is_active = False
         return {"message": f"Permiso {permission_id} desactivado (Soft Delete)"}
 
     # ── ASIGNACIÓN ROL → USUARIO ──────────────────────────────────────────────
@@ -264,11 +284,16 @@ class SecurityService:
         if not role or not role.is_active:
             raise ValueError("Rol no encontrado o inactivo")
 
-        if SecurityRepository.get_user_role(user_id, role_id):
+        existing = SecurityRepository.get_user_role_any(user_id, role_id)
+        if existing and existing.is_active:
             raise ValueError("El usuario ya tiene ese rol asignado")
 
-        user_role = UserHasRole(user_id=user_id, role_id=role_id)
-        SecurityRepository.assign_role_to_user(user_role)
+        with transactional_session():
+            if existing and not existing.is_active:
+                existing.is_active = True
+            else:
+                user_role = UserHasRole(user_id=user_id, role_id=role_id)
+                SecurityRepository.assign_role_to_user(user_role, commit=False)
         return {
             "message": f"Rol '{role.name}' asignado al usuario '{user.username}'",
             "user_id": user_id,
@@ -277,11 +302,11 @@ class SecurityService:
 
     @staticmethod
     def revoke_role_from_user(user_id: int, role_id: int) -> dict:
-        user_role = SecurityRepository.get_user_role(user_id, role_id)
-        if not user_role:
-            raise ValueError("El usuario no tiene ese rol asignado")
-        user_role.is_active = False
-        db.session.commit()
+        with transactional_session():
+            user_role = SecurityRepository.get_user_role(user_id, role_id)
+            if not user_role:
+                raise ValueError("El usuario no tiene ese rol asignado")
+            user_role.is_active = False
         return {"message": "Rol revocado correctamente"}
 
     @staticmethod
@@ -309,11 +334,16 @@ class SecurityService:
         if not permission or not permission.is_active:
             raise ValueError("Permiso no encontrado o inactivo")
 
-        if SecurityRepository.get_role_permission(role_id, permission_id):
+        existing = SecurityRepository.get_role_permission_any(role_id, permission_id)
+        if existing and existing.is_active:
             raise ValueError("El rol ya tiene ese permiso asignado")
 
-        rhp = RoleHasPermission(role_id=role_id, permission_id=permission_id)
-        SecurityRepository.assign_permission_to_role(rhp)
+        with transactional_session():
+            if existing and not existing.is_active:
+                existing.is_active = True
+            else:
+                rhp = RoleHasPermission(role_id=role_id, permission_id=permission_id)
+                SecurityRepository.assign_permission_to_role(rhp, commit=False)
         return {
             "message": f"Permiso '{permission.name}' asignado al rol '{role.name}'",
             "role_id": role_id,
@@ -322,11 +352,11 @@ class SecurityService:
 
     @staticmethod
     def revoke_permission_from_role(role_id: int, permission_id: int) -> dict:
-        rhp = SecurityRepository.get_role_permission(role_id, permission_id)
-        if not rhp:
-            raise ValueError("El rol no tiene ese permiso asignado")
-        rhp.is_active = False
-        db.session.commit()
+        with transactional_session():
+            rhp = SecurityRepository.get_role_permission(role_id, permission_id)
+            if not rhp:
+                raise ValueError("El rol no tiene ese permiso asignado")
+            rhp.is_active = False
         return {"message": "Permiso revocado correctamente"}
 
     @staticmethod
@@ -368,66 +398,66 @@ class SecurityService:
 
     @staticmethod
     def soft_delete_user(user_id: int) -> dict:
-        user = SecurityRepository.get_user_by_id(user_id)
-        if not user or not user.is_active:
-            raise ValueError("Usuario no encontrado o ya inactivo")
-        user.is_active = False
-        db.session.commit()
+        with transactional_session():
+            user = SecurityRepository.get_user_by_id(user_id)
+            if not user or not user.is_active:
+                raise ValueError("Usuario no encontrado o ya inactivo")
+            user.is_active = False
         return {"message": f"Usuario {user_id} desactivado (Soft Delete)"}
     
     @staticmethod
     def update_user_profile(user_id: int, data: dict) -> dict:
-        user = SecurityRepository.get_user_by_id(user_id)
-        if not user or not user.is_active:
-            raise ValueError("Usuario no encontrado o inactivo")
-        
-        person = SecurityRepository.get_person_by_id(user.person_id)
-        if person:
-            if 'first_name' in data and data['first_name']:
-                person.first_name = data['first_name'].strip()
-            if 'last_name' in data and data['last_name']:
-                person.last_name = data['last_name'].strip()
-            if 'document_id' in data and data['document_id']:
-                validated_doc = validate_document_id(data['document_id'])
-                existing = SecurityRepository.get_person_by_document(validated_doc)
-                if existing and existing.id != person.id:
-                    raise ValueError("Ya existe una persona registrada con ese documento de identidad")
-                person.document_id = validated_doc
-            if 'email' in data and data['email']:
-                person.email = data['email'].strip()
+        with transactional_session():
+            user = SecurityRepository.get_user_by_id(user_id)
+            if not user or not user.is_active:
+                raise ValueError("Usuario no encontrado o inactivo")
             
-        if 'role_name' in data and data['role_name']:
-            role = SecurityRepository.get_role_by_name(data['role_name'])
-            if not role or not role.is_active:
-                raise ValueError(f"El rol '{data['role_name']}' no existe o está inactivo.")
-            
-            # Remove existing role assignments
-            UserHasRole.query.filter_by(user_id=user_id).delete()
-            
-            # Insert the new role assignment
-            new_role = UserHasRole(user_id=user_id, role_id=role.id)
-            db.session.add(new_role)
-            
-        db.session.commit()
+            person = SecurityRepository.get_person_by_id(user.person_id)
+            if person:
+                if 'first_name' in data and data['first_name']:
+                    person.first_name = data['first_name'].strip()
+                if 'last_name' in data and data['last_name']:
+                    person.last_name = data['last_name'].strip()
+                if 'document_id' in data and data['document_id']:
+                    validated_doc = validate_document_id(data['document_id'])
+                    existing = SecurityRepository.get_person_by_document(validated_doc)
+                    if existing and existing.id != person.id:
+                        raise ValueError("Ya existe una persona registrada con ese documento de identidad")
+                    person.document_id = validated_doc
+                if 'email' in data and data['email']:
+                    person.email = data['email'].strip()
+                
+            if 'role_name' in data and data['role_name']:
+                role = SecurityRepository.get_role_by_name(data['role_name'])
+                if not role or not role.is_active:
+                    raise ValueError(f"El rol '{data['role_name']}' no existe o está inactivo.")
+                
+                # Remove existing role assignments
+                UserHasRole.query.filter_by(user_id=user_id).delete()
+                
+                # Insert the new role assignment
+                new_role = UserHasRole(user_id=user_id, role_id=role.id)
+                db.session.add(new_role)
+                
         return {"message": "Perfil de usuario actualizado exitosamente"}
 
     @staticmethod
     def update_own_profile(user_id: int, data: dict) -> dict:
         """Permite a cualquier usuario autenticado actualizar únicamente sus propios datos personales."""
-        user = SecurityRepository.get_user_by_id(user_id)
-        if not user or not user.is_active:
-            raise ValueError("Usuario no encontrado o inactivo")
-        
-        person = SecurityRepository.get_person_by_id(user.person_id)
-        if not person:
-            raise ValueError("Datos de persona no encontrados para este usuario")
-        
-        if 'first_name' in data and data['first_name']:
-            person.first_name = data['first_name'].strip()
-        if 'last_name' in data and data['last_name']:
-            person.last_name = data['last_name'].strip()
-        if 'email' in data and data['email']:
-            person.email = data['email'].strip()
+        with transactional_session():
+            user = SecurityRepository.get_user_by_id(user_id)
+            if not user or not user.is_active:
+                raise ValueError("Usuario no encontrado o inactivo")
             
-        db.session.commit()
+            person = SecurityRepository.get_person_by_id(user.person_id)
+            if not person:
+                raise ValueError("Datos de persona no encontrados para este usuario")
+            
+            if 'first_name' in data and data['first_name']:
+                person.first_name = data['first_name'].strip()
+            if 'last_name' in data and data['last_name']:
+                person.last_name = data['last_name'].strip()
+            if 'email' in data and data['email']:
+                person.email = data['email'].strip()
+                
         return {"message": "Datos personales actualizados exitosamente"}
