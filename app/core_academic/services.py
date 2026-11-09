@@ -127,6 +127,20 @@ class AcademicService:
 
         return False
 
+    @staticmethod
+    def can_teacher_access_student(student_id: int, user_id: int, roles: list = None) -> bool:
+        """Verifica que un docente o practicante comparta al menos un grupo activo con el estudiante (anti-IDOR)."""
+        roles = roles or []
+        if 'administrador' in roles or student_id == user_id:
+            return True
+        user_groups = AcademicRepository.get_groups_by_user(user_id)
+        user_group_ids = {g.id for g in user_groups}
+        if not user_group_ids:
+            return False
+        student_groups = AcademicRepository.get_groups_by_user(student_id)
+        student_group_ids = {g.id for g in student_groups}
+        return bool(user_group_ids & student_group_ids)
+
     # ── GRUPOS ────────────────────────────────────────────────────────────────
     @staticmethod
     def create_group(teacher_id: int, name: str) -> dict:
@@ -665,6 +679,8 @@ class AcademicService:
 
     @staticmethod
     def submit_attempt(attempt_id: int, answers: list, student_id: int = None) -> dict:
+        if not isinstance(answers, list):
+            raise ValueError("El campo 'answers' debe ser una lista válida")
         with transactional_session():
             # Bloqueo pesimista SELECT ... FOR UPDATE sobre el intento para evitar doble envío concurrente
             attempt = AcademicRepository.get_attempt_by_id_for_update(attempt_id)
@@ -674,20 +690,48 @@ class AcademicService:
                 raise PermissionError("Acceso denegado: este intento pertenece a otro estudiante")
             if attempt.submitted_at:
                 raise ValueError("Este intento ya fue enviado")
+
+            # Cargar preguntas y opciones válidas del examen para validar integridad del payload
+            questions = AcademicRepository.get_questions_by_exam(attempt.exam_id)
+            valid_q_ids = {q.id for q in questions}
+            options_by_q = AcademicRepository.get_options_by_questions(list(valid_q_ids))
+            valid_opts_by_q = {
+                qid: {o.id for o in opts}
+                for qid, opts in options_by_q.items()
+            }
+
+            seen_questions = set()
+            student_map = {}
             for ans in answers:
+                if not isinstance(ans, dict) or 'question_id' not in ans or 'selected_option_id' not in ans:
+                    raise ValueError("Cada respuesta debe incluir 'question_id' y 'selected_option_id'")
+                try:
+                    qid = int(ans['question_id'])
+                    opt_id = int(ans['selected_option_id'])
+                except (TypeError, ValueError):
+                    raise ValueError("Los identificadores 'question_id' y 'selected_option_id' deben ser enteros válidos")
+
+                if qid in seen_questions:
+                    raise ValueError(f"Respuesta duplicada para la pregunta {qid} en el mismo intento")
+                if qid not in valid_q_ids:
+                    raise ValueError(f"La pregunta {qid} no pertenece a este examen o está inactiva")
+                if opt_id not in valid_opts_by_q.get(qid, set()):
+                    raise ValueError(f"La opción {opt_id} no pertenece a la pregunta {qid}")
+
+                seen_questions.add(qid)
+                student_map[qid] = opt_id
                 attempt_answer = AttemptAnswer(
                     attempt_id=attempt_id,
-                    question_id=ans['question_id'],
-                    selected_option_id=ans['selected_option_id']
+                    question_id=qid,
+                    selected_option_id=opt_id
                 )
                 db.session.add(attempt_answer)
+
             attempt.submitted_at = datetime.now(timezone.utc)
 
             # Calcular y congelar el snapshot inmutable de calificación (BE-01, BE-03)
-            questions = AcademicRepository.get_questions_by_exam(attempt.exam_id)
             answer_keys = AcademicRepository.get_answer_keys_by_exam(attempt.exam_id)
             key_map = {k.question_id: k.correct_option_id for k in answer_keys if k.is_active}
-            student_map = {ans['question_id']: ans['selected_option_id'] for ans in answers}
 
             total_possible = sum(q.points for q in questions) if questions else 0
             earned = 0
