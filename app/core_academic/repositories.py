@@ -317,13 +317,14 @@ class AcademicRepository:
 
     @staticmethod
     def count_attempts_by_student_and_exam(student_id: int, exam_id: int) -> int:
-        """Conteo SARGable y explícitamente parametrizado usando idx_attempt_student_exam_active."""
-        stmt = text("""
+        """Conteo SARGable, explícitamente parametrizado y con lectura actual (FOR UPDATE en InnoDB) usando idx_attempt_student_exam_active."""
+        lock_clause = " FOR UPDATE" if db.engine.dialect.name == "mysql" else ""
+        stmt = text(f"""
             SELECT COUNT(id)
             FROM exam_attempts
             WHERE student_id = :student_id
               AND exam_id = :exam_id
-              AND is_active = :active_flag
+              AND is_active = :active_flag{lock_clause}
         """).bindparams(
             bindparam("student_id", value=int(student_id), type_=Integer),
             bindparam("exam_id", value=int(exam_id), type_=Integer),
