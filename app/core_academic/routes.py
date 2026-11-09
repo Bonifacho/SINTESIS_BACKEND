@@ -2,7 +2,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from app.core_academic.services import AcademicService
-from app.utils.decorators import role_required
+from app.utils.decorators import role_required, safe_internal_error
 
 academic_bp = Blueprint('academic', __name__, url_prefix='/api/v1/academic')
 
@@ -24,7 +24,7 @@ def create_group():
                             teacher_id=teacher_id,
                             name=data['name'])}), 201
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @academic_bp.route('/groups', methods=['GET'])
 @jwt_required()
@@ -32,7 +32,7 @@ def get_groups():
     try:
         return jsonify({"data": AcademicService.get_all_groups()}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @academic_bp.route('/groups/<int:group_id>', methods=['GET'])
 @role_required('docente', 'administrador', 'estudiante', 'practicante')
@@ -48,7 +48,7 @@ def get_group(group_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @academic_bp.route('/groups/<int:group_id>', methods=['PUT'])
 @role_required('docente', 'administrador')
@@ -68,7 +68,7 @@ def update_group(group_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @academic_bp.route('/groups/<int:group_id>', methods=['DELETE'])
 @role_required('docente', 'administrador')
@@ -103,7 +103,7 @@ def create_enrollment():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @academic_bp.route('/groups/<int:group_id>/enrollments', methods=['GET'])
 @jwt_required()
@@ -122,11 +122,22 @@ def get_enrollments_by_group(group_id):
 @academic_bp.route('/enrollments/<int:enrollment_id>', methods=['GET'])
 @jwt_required()
 def get_enrollment(enrollment_id):
+    current_user_id = int(get_jwt_identity())
+    claims = get_jwt() or {}
+    roles = claims.get('roles', [])
     try:
-        return jsonify({"data": AcademicService.get_enrollment_by_id(
-            enrollment_id)}), 200
+        enrollment_data = AcademicService.get_enrollment_by_id(enrollment_id)
+        if (
+            'administrador' not in roles
+            and enrollment_data.get('student_id') != current_user_id
+            and not AcademicService.can_user_access_group(enrollment_data['group_id'], current_user_id, roles)
+        ):
+            return jsonify({"error": "Acceso denegado a esta matrícula"}), 403
+        return jsonify({"data": enrollment_data}), 200
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return safe_internal_error(e)
 
 @academic_bp.route('/enrollments/<int:enrollment_id>', methods=['PUT'])
 @role_required('docente', 'administrador')
@@ -592,7 +603,7 @@ def reset_attempt(attempt_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 
 # ── OBSERVADORES (PRACTICANTES) ───────────────────────────────────────────────
@@ -617,7 +628,7 @@ def assign_observer(group_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @academic_bp.route('/groups/<int:group_id>/observers', methods=['GET'])
 @jwt_required()
@@ -633,7 +644,7 @@ def get_observers(group_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @academic_bp.route('/observers/<int:observer_id>', methods=['DELETE'])
 @role_required('docente', 'administrador')
@@ -662,7 +673,7 @@ def get_user_groups(user_id):
         result = AcademicService.get_user_groups(user_id)
         return jsonify({"status": "success", "data": result}), 200
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return safe_internal_error(e, use_status_envelope=True)
 
 @academic_bp.route('/groups/<int:group_id>/topics', methods=['GET'])
 @jwt_required()
@@ -676,7 +687,7 @@ def get_group_topics(group_id):
         result = AcademicService.get_group_topics(group_id)
         return jsonify({"status": "success", "data": result}), 200
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return safe_internal_error(e, use_status_envelope=True)
 
 @academic_bp.route('/topics/<int:topic_id>/ovas', methods=['GET'])
 @jwt_required()
@@ -693,7 +704,7 @@ def get_topic_ovas(topic_id):
     except ValueError as e:
         return jsonify({"status": "error", "message": str(e)}), 404
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return safe_internal_error(e, use_status_envelope=True)
 
 @academic_bp.route('/exams/by-ova/<int:ova_id>', methods=['GET'])
 @jwt_required()
@@ -710,7 +721,7 @@ def get_exam_by_ova_full(ova_id):
     except ValueError as e:
         return jsonify({"status": "error", "message": str(e)}), 404
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return safe_internal_error(e, use_status_envelope=True)
 
 @academic_bp.route('/exams/by-ova/<int:ova_id>/teacher', methods=['GET'])
 @role_required('docente', 'administrador')
@@ -727,7 +738,7 @@ def get_exam_by_ova_teacher(ova_id):
     except ValueError as e:
         return jsonify({"status": "error", "message": str(e)}), 404
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return safe_internal_error(e, use_status_envelope=True)
 
 @academic_bp.route('/students/<int:student_id>/attempts', methods=['GET'])
 @jwt_required()
@@ -738,11 +749,14 @@ def get_student_attempts(student_id):
     if 'estudiante' in roles and not any(r in roles for r in ['administrador', 'docente', 'practicante']):
         if student_id != current_user_id:
             return jsonify({"status": "error", "message": "Acceso denegado: no puedes consultar intentos de otros estudiantes"}), 403
+    elif any(r in roles for r in ['docente', 'practicante']) and 'administrador' not in roles:
+        if not AcademicService.can_teacher_access_student(student_id, current_user_id, roles):
+            return jsonify({"status": "error", "message": "Acceso denegado: el estudiante no pertenece a tus grupos asignados"}), 403
     try:
         result = AcademicService.get_attempts_by_student(student_id)
         return jsonify({"status": "success", "data": result}), 200
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return safe_internal_error(e, use_status_envelope=True)
 
 @academic_bp.route('/groups/<int:group_id>/attempts', methods=['GET'])
 @jwt_required()
@@ -756,7 +770,7 @@ def get_group_attempts(group_id):
         result = AcademicService.get_attempts_by_group(group_id)
         return jsonify({"status": "success", "data": result}), 200
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return safe_internal_error(e, use_status_envelope=True)
 
 
 # ── PROGRESO (TRACKING SILENCIOSO) ────────────────────────────────────────
@@ -779,7 +793,7 @@ def register_progress():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 
 @academic_bp.route('/groups/<int:group_id>/activity', methods=['GET'])
@@ -795,5 +809,5 @@ def get_group_activity(group_id):
         result = AcademicService.get_group_activity(group_id)
         return jsonify({"data": result}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 

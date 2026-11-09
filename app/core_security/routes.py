@@ -7,13 +7,14 @@ from flask_jwt_extended import (
 from datetime import datetime, timezone, timedelta
 from app.core_security.services import SecurityService
 from app.core_security.repositories import SecurityRepository
-from app.utils.decorators import role_required
+from app.utils.decorators import role_required, rate_limit, safe_internal_error
 
 security_bp = Blueprint('security', __name__, url_prefix='/api/v1/security')
 
 
 # ── REGISTRO ──────────────────────────────────────────────────────────────────
 @security_bp.route('/register', methods=['POST'])
+@rate_limit(max_requests=10, window_seconds=60)
 def register():
     data = request.get_json()
     required = ['first_name', 'last_name', 'document_id',
@@ -37,7 +38,7 @@ def register():
             return jsonify({"error": str(e)}), 422
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @security_bp.route('/admin/register', methods=['POST'])
 @role_required('administrador')
@@ -62,11 +63,12 @@ def admin_register():
             return jsonify({"error": str(e)}), 422
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 
 # ── LOGIN ─────────────────────────────────────────────────────────────────────
 @security_bp.route('/login', methods=['POST'])
+@rate_limit(max_requests=10, window_seconds=60)
 def login():
     data = request.get_json()
     if not data or 'username' not in data or 'password' not in data:
@@ -94,11 +96,12 @@ def login():
     except ValueError as e:
         return jsonify({"error": str(e)}), 401
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 
 # ── RECUPERACIÓN DE CONTRASEÑA ────────────────────────────────────────────────
 @security_bp.route('/forgot-password', methods=['POST'])
+@rate_limit(max_requests=10, window_seconds=60)
 def forgot_password():
     data = request.get_json()
     if not data or 'identifier' not in data:
@@ -109,9 +112,10 @@ def forgot_password():
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @security_bp.route('/reset-password', methods=['POST'])
+@rate_limit(max_requests=10, window_seconds=60)
 def reset_password():
     data = request.get_json()
     if not data or 'token' not in data or 'new_password' not in data:
@@ -122,7 +126,7 @@ def reset_password():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 
 # ── REFRESH TOKEN ─────────────────────────────────────────────────────────
@@ -141,8 +145,10 @@ def refresh():
             additional_claims={"roles": roles_list}
         )
         return jsonify({"access_token": new_access}), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 401
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 
 # ── LOGOUT ────────────────────────────────────────────────────────────────────
@@ -163,7 +169,7 @@ def logout():
         )
         return jsonify(result), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 
 # ── USUARIOS ──────────────────────────────────────────────────────────────────
@@ -173,7 +179,7 @@ def get_users():
     try:
         return jsonify({"data": SecurityService.get_all_users()}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @security_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @role_required('administrador')
@@ -183,7 +189,7 @@ def delete_user(user_id):
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @security_bp.route('/users/<int:user_id>/roles', methods=['GET'])
 @role_required('administrador')
@@ -237,7 +243,7 @@ def get_roles():
     try:
         return jsonify({"data": SecurityService.get_all_roles()}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @security_bp.route('/roles/<int:role_id>', methods=['DELETE'])
 @role_required('administrador')
@@ -300,7 +306,7 @@ def get_permissions():
     try:
         return jsonify({"data": SecurityService.get_all_permissions()}), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return safe_internal_error(e)
 
 @security_bp.route('/permissions/<int:permission_id>', methods=['DELETE'])
 @role_required('administrador')
