@@ -1,3 +1,4 @@
+import os
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
@@ -5,6 +6,13 @@ from app.extensions import db, migrate, jwt
 # Importar modelos para que Alembic los detecte
 from app.core_security import models as security_models
 from app.core_academic import models as academic_models
+
+
+def _parse_cors_origins() -> str | list[str]:
+    raw = os.getenv("CORS_ORIGINS", "*").strip()
+    if not raw or raw == "*":
+        return "*"
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 def create_app(config_class=Config):
@@ -18,8 +26,8 @@ def create_app(config_class=Config):
     jwt.init_app(app)
 
     # ── CORS ──────────────────────────────────────────────────────────────
-    # Permite peticiones desde el portal web (Vite dev server u otro origen)
-    CORS(app, supports_credentials=True)
+    # Permite peticiones desde orígenes parametrizables por entorno (CORS_ORIGINS)
+    CORS(app, origins=_parse_cors_origins(), supports_credentials=True)
 
     # ── Error Handlers Globales ───────────────────────────────────────────
     # Garantizan que TODA respuesta de error sea JSON parseable
@@ -45,8 +53,16 @@ def create_app(config_class=Config):
     def method_not_allowed(e):
         return jsonify({"error": "Método HTTP no permitido", "code": 405}), 405
 
+    @app.errorhandler(429)
+    def too_many_requests(e):
+        return jsonify({"error": "Demasiadas peticiones. Por favor intente nuevamente más tarde.", "code": 429}), 429
+
     @app.errorhandler(500)
     def internal_error(e):
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return jsonify({"error": "Error interno del servidor", "code": 500}), 500
 
     # ── Callbacks de flask-jwt-extended ────────────────────────────────────
