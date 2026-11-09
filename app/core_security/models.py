@@ -17,6 +17,10 @@ class Person(db.Model):
     created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_active   = db.Column(db.Boolean, default=True, nullable=False)
 
+    __table_args__ = (
+        db.Index('idx_person_email_active', 'email', 'is_active'),
+    )
+
     user = db.relationship('User', backref='person', uselist=False,
                            cascade="all, delete-orphan")
 
@@ -103,6 +107,7 @@ class UserHasRole(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'role_id', name='uq_user_role'),
+        db.Index('idx_uhr_user_active', 'user_id', 'is_active'),
     )
 
     def __init__(self, **kwargs):
@@ -161,6 +166,10 @@ class PasswordResetToken(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     expires_at = db.Column(db.DateTime, nullable=False)
     is_used    = db.Column(db.Boolean, default=False, nullable=False)
+
+    __table_args__ = (
+        db.Index('idx_prt_user_used_expires', 'user_id', 'is_used', 'expires_at'),
+    )
 
     user = db.relationship('User', backref=db.backref('reset_tokens', cascade="all, delete-orphan", lazy='dynamic'))
 

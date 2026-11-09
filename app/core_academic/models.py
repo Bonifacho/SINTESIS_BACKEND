@@ -28,6 +28,10 @@ class Group(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_active  = db.Column(db.Boolean, default=True, nullable=False)
 
+    __table_args__ = (
+        db.Index('idx_group_teacher_active', 'teacher_id', 'is_active'),
+    )
+
     # Relaciones
     enrollments = db.relationship('Enrollment', backref='group', lazy='dynamic', cascade="all, delete-orphan")
     topics      = db.relationship('Topic', backref='group', lazy='dynamic', cascade="all, delete-orphan")
@@ -43,6 +47,12 @@ class Enrollment(db.Model):
     enrolled_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_active   = db.Column(db.Boolean, default=True, nullable=False)
 
+    __table_args__ = (
+        db.UniqueConstraint('group_id', 'student_id', name='uq_enrollment_group_student'),
+        db.Index('idx_enroll_student_group_active', 'student_id', 'group_id', 'is_active'),
+        db.Index('idx_enroll_group_active', 'group_id', 'is_active'),
+    )
+
 
 class Topic(db.Model):
     """Tema dentro de un grupo (ej: Unidad 1 — Álgebra Lineal)."""
@@ -53,6 +63,10 @@ class Topic(db.Model):
     group_id    = db.Column(db.Integer, db.ForeignKey('academic_groups.id'), nullable=False)
     order_index = db.Column(db.Integer, default=0)
     is_active   = db.Column(db.Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        db.Index('idx_topic_group_active_order', 'group_id', 'is_active', 'order_index'),
+    )
 
     # Relaciones
     ovas = db.relationship('OVA', backref='topic', lazy='dynamic', cascade="all, delete-orphan")
@@ -78,6 +92,10 @@ class OVA(db.Model):
     is_active   = db.Column(db.Boolean, default=True, nullable=False)
     created_at  = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
+    __table_args__ = (
+        db.Index('idx_ova_topic_active_order', 'topic_id', 'is_active', 'order_index'),
+    )
+
     # Relaciones
     resources = db.relationship('OVAResource', backref='ova', lazy='dynamic', cascade="all, delete-orphan")
     exam      = db.relationship('Exam', backref='ova', uselist=False, cascade="all, delete-orphan")
@@ -99,6 +117,10 @@ class OVAResource(db.Model):
     display_title = db.Column(db.String(150), nullable=False)
     order_index   = db.Column(db.Integer, default=0)
     is_active     = db.Column(db.Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        db.Index('idx_resource_ova_active_order', 'ova_id', 'is_active', 'order_index'),
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -139,6 +161,10 @@ class Question(db.Model):
     order_index = db.Column(db.Integer, default=0)
     is_active   = db.Column(db.Boolean, default=True, nullable=False)
 
+    __table_args__ = (
+        db.Index('idx_question_exam_active_order', 'exam_id', 'is_active', 'order_index'),
+    )
+
     # Relaciones
     options    = db.relationship('Option', backref='question', lazy='dynamic', cascade="all, delete-orphan")
     answer_key = db.relationship('AnswerKey', backref='question', uselist=False, cascade="all, delete-orphan")
@@ -156,6 +182,10 @@ class Option(db.Model):
     text        = db.Column(db.String(500), nullable=False)
     order_index = db.Column(db.Integer, default=0)
     is_active   = db.Column(db.Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        db.Index('idx_option_question_active_order', 'question_id', 'is_active', 'order_index'),
+    )
 
 
 class AnswerKey(db.Model):
@@ -198,6 +228,12 @@ class ExamAttempt(db.Model):
     earned_points   = db.Column(db.Integer, nullable=True)   # Snapshot suma puntos logrados
     is_active       = db.Column(db.Boolean, default=True, nullable=False)
 
+    __table_args__ = (
+        db.Index('idx_attempt_student_exam_active', 'student_id', 'exam_id', 'is_active'),
+        db.Index('idx_attempt_exam_active_submitted', 'exam_id', 'is_active', 'submitted_at'),
+        db.Index('idx_attempt_student_active_submitted', 'student_id', 'is_active', 'submitted_at'),
+    )
+
     # Relaciones
     answers = db.relationship('AttemptAnswer', backref='attempt', lazy='dynamic', cascade="all, delete-orphan")
 
@@ -216,7 +252,13 @@ class AttemptAnswer(db.Model):
     selected_option_id = db.Column(db.Integer, db.ForeignKey('exam_options.id'), nullable=False)
     answered_at        = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     is_active          = db.Column(db.Boolean, default=True, nullable=False)
-    
+
+    __table_args__ = (
+        db.UniqueConstraint('attempt_id', 'question_id', name='uq_attempt_question'),
+        db.Index('idx_att_ans_attempt_active', 'attempt_id', 'is_active'),
+    )
+
+
 class GroupObserver(db.Model):
     """
     Controla qué practicantes pueden observar qué grupos.
@@ -240,6 +282,7 @@ class GroupObserver(db.Model):
     __table_args__ = (
         db.UniqueConstraint('group_id', 'observer_id',
                             name='uq_group_observer'),
+        db.Index('idx_observer_user_group_active', 'observer_id', 'group_id', 'is_active'),
     )
 
 
@@ -263,3 +306,8 @@ class StudentProgress(db.Model):
     resource_name = db.Column(db.String(150), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True),
                            default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        db.Index('idx_progress_ova_user_created', 'ova_id', 'user_id', 'created_at'),
+        db.Index('idx_progress_user_created', 'user_id', 'created_at'),
+    )
