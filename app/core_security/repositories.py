@@ -1,5 +1,6 @@
 # app/core_security/repositories.py
 from app.extensions import db
+from app.utils.database import persist_entity
 from app.core_security.models import (
     Person, User, Role, Permission,
     UserHasRole, RoleHasPermission, BlacklistedToken,
@@ -11,10 +12,8 @@ class SecurityRepository:
 
     # ── PERSONAS ──────────────────────────────────────────────────────────────
     @staticmethod
-    def create_person(person: Person) -> Person:
-        db.session.add(person)
-        db.session.flush()
-        return person
+    def create_person(person: Person, commit: bool = False) -> Person:
+        return persist_entity(person, commit=commit)
 
     @staticmethod
     def get_person_by_id(person_id: int) -> Person:
@@ -31,10 +30,8 @@ class SecurityRepository:
 
     # ── USUARIOS ──────────────────────────────────────────────────────────────
     @staticmethod
-    def create_user(user: User) -> User:
-        db.session.add(user)
-        db.session.commit()
-        return user
+    def create_user(user: User, commit: bool = True) -> User:
+        return persist_entity(user, commit=commit)
 
     @staticmethod
     def get_user_by_id(user_id: int) -> User:
@@ -50,10 +47,8 @@ class SecurityRepository:
 
     # ── ROLES ─────────────────────────────────────────────────────────────────
     @staticmethod
-    def create_role(role: Role) -> Role:
-        db.session.add(role)
-        db.session.commit()
-        return role
+    def create_role(role: Role, commit: bool = True) -> Role:
+        return persist_entity(role, commit=commit)
 
     @staticmethod
     def get_role_by_id(role_id: int) -> Role:
@@ -69,10 +64,8 @@ class SecurityRepository:
 
     # ── PERMISOS ──────────────────────────────────────────────────────────────
     @staticmethod
-    def create_permission(permission: Permission) -> Permission:
-        db.session.add(permission)
-        db.session.commit()
-        return permission
+    def create_permission(permission: Permission, commit: bool = True) -> Permission:
+        return persist_entity(permission, commit=commit)
 
     @staticmethod
     def get_permission_by_id(permission_id: int) -> Permission:
@@ -89,15 +82,19 @@ class SecurityRepository:
 
     # ── USER HAS ROLE ─────────────────────────────────────────────────────────
     @staticmethod
-    def assign_role_to_user(user_has_role: UserHasRole) -> UserHasRole:
-        db.session.add(user_has_role)
-        db.session.commit()
-        return user_has_role
+    def assign_role_to_user(user_has_role: UserHasRole, commit: bool = True) -> UserHasRole:
+        return persist_entity(user_has_role, commit=commit)
 
     @staticmethod
     def get_user_role(user_id: int, role_id: int) -> UserHasRole:
         return db.session.query(UserHasRole).filter_by(
             user_id=user_id, role_id=role_id, is_active=True).first()
+
+    @staticmethod
+    def get_user_role_any(user_id: int, role_id: int) -> UserHasRole:
+        """Busca asignación de rol incluyendo registros inactivos (soft-delete)."""
+        return db.session.query(UserHasRole).filter_by(
+            user_id=user_id, role_id=role_id).first()
 
     @staticmethod
     def get_roles_by_user(user_id: int):
@@ -106,10 +103,8 @@ class SecurityRepository:
 
     # ── ROLE HAS PERMISSION ───────────────────────────────────────────────────
     @staticmethod
-    def assign_permission_to_role(rhp: RoleHasPermission) -> RoleHasPermission:
-        db.session.add(rhp)
-        db.session.commit()
-        return rhp
+    def assign_permission_to_role(rhp: RoleHasPermission, commit: bool = True) -> RoleHasPermission:
+        return persist_entity(rhp, commit=commit)
 
     @staticmethod
     def get_role_permission(role_id: int, permission_id: int) -> RoleHasPermission:
@@ -118,16 +113,20 @@ class SecurityRepository:
             is_active=True).first()
 
     @staticmethod
+    def get_role_permission_any(role_id: int, permission_id: int) -> RoleHasPermission:
+        """Busca permiso de rol incluyendo registros inactivos (soft-delete)."""
+        return db.session.query(RoleHasPermission).filter_by(
+            role_id=role_id, permission_id=permission_id).first()
+
+    @staticmethod
     def get_permissions_by_role(role_id: int):
         return db.session.query(RoleHasPermission).filter_by(
             role_id=role_id, is_active=True).all()
 
     # ── BLACKLISTED TOKENS ────────────────────────────────────────────────────
     @staticmethod
-    def add_token_to_blacklist(token: BlacklistedToken) -> BlacklistedToken:
-        db.session.add(token)
-        db.session.commit()
-        return token
+    def add_token_to_blacklist(token: BlacklistedToken, commit: bool = True) -> BlacklistedToken:
+        return persist_entity(token, commit=commit)
 
     @staticmethod
     def is_token_blacklisted(jti: str) -> bool:
@@ -137,10 +136,8 @@ class SecurityRepository:
 
     # ── TOKENS DE RECUPERACIÓN DE CONTRASEÑA ──────────────────────────────────
     @staticmethod
-    def create_password_reset_token(token: 'PasswordResetToken') -> 'PasswordResetToken':
-        db.session.add(token)
-        db.session.commit()
-        return token
+    def create_password_reset_token(token: 'PasswordResetToken', commit: bool = True) -> 'PasswordResetToken':
+        return persist_entity(token, commit=commit)
 
     @staticmethod
     def get_password_reset_token(token_hash: str) -> 'PasswordResetToken':
