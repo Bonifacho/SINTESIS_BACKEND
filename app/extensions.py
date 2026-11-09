@@ -6,10 +6,11 @@ db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
 
-# Este es el bloque que debemos añadir para la seguridad V2
+# Verificación SARGable y parametrizada de revocación de JWT en cada request
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(jwt_header, jwt_payload: dict) -> bool:
-    from app.core_security.models import BlacklistedToken
-    jti = jwt_payload["jti"]
-    token = db.session.query(BlacklistedToken.id).filter_by(jti=jti).scalar()
-    return token is not None
+    from app.core_security.repositories import SecurityRepository
+    jti = jwt_payload.get("jti")
+    if not jti:
+        return True
+    return SecurityRepository.is_token_blacklisted(jti)

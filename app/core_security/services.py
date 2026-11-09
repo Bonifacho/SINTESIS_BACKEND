@@ -93,13 +93,9 @@ class SecurityService:
         # Obtener datos de la persona asociada
         person = SecurityRepository.get_person_by_id(user.person_id)
 
-        # Obtener roles activos del usuario
-        user_roles = SecurityRepository.get_roles_by_user(user.id)
-        role_names = []
-        for ur in user_roles:
-            role = SecurityRepository.get_role_by_id(ur.role_id)
-            if role and role.is_active:
-                role_names.append(role.name)
+        # Obtener roles activos del usuario en una sola consulta JOIN SARGable
+        active_roles = SecurityRepository.get_active_roles_for_user(user.id)
+        role_names = [r.name for r in active_roles]
 
         return {
             "user_id": user.id,
@@ -130,7 +126,7 @@ class SecurityService:
     @staticmethod
     def forgot_password(identifier: str) -> dict:
         """Genera un token real y lo almacena para recuperar la contraseña."""
-        user = SecurityRepository.get_user_by_username(identifier)
+        user = SecurityRepository.get_user_by_identifier(identifier)
         if not user or not user.is_active:
             raise ValueError("Usuario no encontrado")
             
@@ -178,7 +174,8 @@ class SecurityService:
         
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
         with transactional_session():
-            token_record = SecurityRepository.get_password_reset_token(token_hash)
+            # Bloqueo pesimista SELECT ... FOR UPDATE para evitar consumo concurrente del mismo token
+            token_record = SecurityRepository.get_password_reset_token_for_update(token_hash)
             
             if not token_record:
                 raise ValueError("El token de recuperación es inválido.")
@@ -193,9 +190,10 @@ class SecurityService:
             if not user or not user.is_active:
                 raise ValueError("El usuario asociado al token no es válido.")
                 
-            # Actualizar contraseña y marcar token de forma atómica
+            # Actualizar contraseña, marcar token e invalidar cualquier remanente activo en 1 sentencia SARGable
             user.password_hash = generate_password_hash(new_password)
             token_record.is_used = True
+            SecurityRepository.invalidate_active_reset_tokens(user.id)
         
         return {"message": "La contraseña ha sido actualizada exitosamente."}
 
@@ -314,14 +312,11 @@ class SecurityService:
         user = SecurityRepository.get_user_by_id(user_id)
         if not user or not user.is_active:
             raise ValueError("Usuario no encontrado o inactivo")
-        user_roles = SecurityRepository.get_roles_by_user(user_id)
-        result = []
-        for ur in user_roles:
-            role = SecurityRepository.get_role_by_id(ur.role_id)
-            if role:
-                result.append({"id": role.id, "name": role.name,
-                               "description": role.description})
-        return result
+        active_roles = SecurityRepository.get_active_roles_for_user(user_id)
+        return [
+            {"id": role.id, "name": role.name, "description": role.description}
+            for role in active_roles
+        ]
 
     # ── ASIGNACIÓN PERMISO → ROL ──────────────────────────────────────────────
     @staticmethod
@@ -376,25 +371,7 @@ class SecurityService:
     # ── CONSULTAS DE USUARIOS ─────────────────────────────────────────────────
     @staticmethod
     def get_all_users() -> list:
-        users = SecurityRepository.get_all_users()
-        result = []
-        for u in users:
-            person = SecurityRepository.get_person_by_id(u.person_id)
-            user_roles = SecurityRepository.get_roles_by_user(u.id)
-            roles = []
-            for ur in user_roles:
-                role = SecurityRepository.get_role_by_id(ur.role_id)
-                if role:
-                    roles.append(role.name)
-            result.append({
-                "id": u.id,
-                "username": u.username,
-                "full_name": f"{person.first_name} {person.last_name}" if person else "",
-                "document_id": person.document_id if person else "",
-                "roles": roles,
-                "is_active": u.is_active
-            })
-        return result
+        return SecurityRepository.get_all_users_enriched()
 
     @staticmethod
     def soft_delete_user(user_id: int) -> dict:
